@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "sdk_version": "0.22.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://ceospdoaxsfflknwfult.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "joinly-mcp",
+      "version": "0.1.0",
+      "title": "Joinly"
+    },
+    "tools": [
+      {
+        "name": "list_my_events",
+        "title": "List my events",
+        "description": "List all events organized by the signed-in Joinly user, newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "description": "Maximum events to return."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_event",
+        "title": "Get event details",
+        "description": "Fetch an event with its rooms and participant counts. Only events the signed-in user organizes are visible.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The event UUID."
+            }
+          },
+          "required": [
+            "event_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_participants",
+        "title": "List participants",
+        "description": "List participants for a Joinly event, optionally filtered by room. RLS ensures only events the signed-in user organizes return data.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The event UUID."
+            },
+            "room_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Optional room UUID to filter by."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          "required": [
+            "event_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

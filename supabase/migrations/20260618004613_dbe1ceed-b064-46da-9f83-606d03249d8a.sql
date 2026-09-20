@@ -1,0 +1,1 @@
+ALTER TABLE public.participants ADD COLUMN checked_in boolean NOT NULL DEFAULT false;

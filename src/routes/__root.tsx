@@ -7,11 +7,9 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import faviconAsset from "../assets/favicon.png.asset.json";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -39,10 +37,6 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
@@ -80,24 +74,35 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Joinly — Nền tảng quản lý sự kiện" },
-      { name: "description", content: "Joinly giúp ban tổ chức tạo sự kiện, quản lý người tham gia qua QR và theo dõi dữ liệu sự kiện trong một nơi duy nhất." },
+      {
+        name: "description",
+        content:
+          "Joinly giúp ban tổ chức tạo sự kiện, quản lý người tham gia qua QR và theo dõi dữ liệu sự kiện trong một nơi duy nhất.",
+      },
       { name: "author", content: "Joinly" },
       { property: "og:title", content: "Joinly — Nền tảng quản lý sự kiện" },
-      { property: "og:description", content: "Joinly giúp ban tổ chức tạo sự kiện, quản lý người tham gia qua QR và theo dõi dữ liệu sự kiện trong một nơi duy nhất." },
+      {
+        property: "og:description",
+        content:
+          "Joinly giúp ban tổ chức tạo sự kiện, quản lý người tham gia qua QR và theo dõi dữ liệu sự kiện trong một nơi duy nhất.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:title", content: "Joinly — Nền tảng quản lý sự kiện" },
-      { name: "twitter:description", content: "Joinly giúp ban tổ chức tạo sự kiện, quản lý người tham gia qua QR và theo dõi dữ liệu sự kiện trong một nơi duy nhất." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/fdfcf88d-e26b-4472-9565-39a442ee22b2/id-preview-27855e2f--ce58ae88-5dcd-4f7f-b0b2-83d4f0db9327.lovable.app-1781743835364.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/fdfcf88d-e26b-4472-9565-39a442ee22b2/id-preview-27855e2f--ce58ae88-5dcd-4f7f-b0b2-83d4f0db9327.lovable.app-1781743835364.png" },
+      {
+        name: "twitter:description",
+        content:
+          "Joinly giúp ban tổ chức tạo sự kiện, quản lý người tham gia qua QR và theo dõi dữ liệu sự kiện trong một nơi duy nhất.",
+      },
     ],
     links: [
-      { rel: "icon", type: "image/png", href: faviconAsset.url },
-      { rel: "apple-touch-icon", sizes: "512x512", href: faviconAsset.url },
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap",
+      },
     ],
   }),
   shellComponent: RootShell,

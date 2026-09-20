@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as McpRouteImport } from './routes/mcp'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
@@ -18,24 +17,15 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as JoinIdRouteImport } from './routes/join.$id'
 import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
 import { Route as AuthenticatedCreateEventRouteImport } from './routes/_authenticated/create-event'
-import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
-import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as JoinIdIndexRouteImport } from './routes/join.$id.index'
 import { Route as JoinIdRoomIdRouteImport } from './routes/join.$id.$roomId'
 import { Route as AuthenticatedEventIdRouteImport } from './routes/_authenticated/event.$id'
 import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
-import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
-import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as JoinIdConfirmTokenRouteImport } from './routes/join.$id.confirm.$token'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const McpRoute = McpRouteImport.update({
-  id: '/mcp',
-  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -73,18 +63,6 @@ const AuthenticatedCreateEventRoute =
     path: '/create-event',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const Char91DotwellKnownChar93OauthProtectedResourceRoute =
-  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
-    id: '/.well-known/oauth-protected-resource',
-    path: '/.well-known/oauth-protected-resource',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const Char91DotmcpChar93ListToolsRoute =
-  Char91DotmcpChar93ListToolsRouteImport.update({
-    id: '/.mcp/list-tools',
-    path: '/.mcp/list-tools',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const JoinIdIndexRoute = JoinIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -106,17 +84,6 @@ const AuthenticatedDashboardIdRoute =
     path: '/dashboard/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const Char91DotmcpChar93InvokeToolToolRoute =
-  Char91DotmcpChar93InvokeToolToolRouteImport.update({
-    id: '/.mcp/invoke-tool/$tool',
-    path: '/.mcp/invoke-tool/$tool',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
-  id: '/.lovable/oauth/consent',
-  path: '/.lovable/oauth/consent',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const JoinIdConfirmTokenRoute = JoinIdConfirmTokenRouteImport.update({
   id: '/confirm/$token',
   path: '/confirm/$token',
@@ -127,15 +94,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
-  '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
-  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/join/$id': typeof JoinIdRouteWithChildren
-  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
-  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
@@ -146,14 +108,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
-  '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
-  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
-  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
-  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
@@ -166,15 +123,10 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
-  '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
-  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/create-event': typeof AuthenticatedCreateEventRoute
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
   '/join/$id': typeof JoinIdRouteWithChildren
-  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
-  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/_authenticated/event/$id': typeof AuthenticatedEventIdRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
@@ -187,15 +139,10 @@ export interface FileRouteTypes {
     | '/'
     | '/forgot-password'
     | '/login'
-    | '/mcp'
     | '/reset-password'
-    | '/.mcp/list-tools'
-    | '/.well-known/oauth-protected-resource'
     | '/create-event'
     | '/my-events'
     | '/join/$id'
-    | '/.lovable/oauth/consent'
-    | '/.mcp/invoke-tool/$tool'
     | '/dashboard/$id'
     | '/event/$id'
     | '/join/$id/$roomId'
@@ -206,14 +153,9 @@ export interface FileRouteTypes {
     | '/'
     | '/forgot-password'
     | '/login'
-    | '/mcp'
     | '/reset-password'
-    | '/.mcp/list-tools'
-    | '/.well-known/oauth-protected-resource'
     | '/create-event'
     | '/my-events'
-    | '/.lovable/oauth/consent'
-    | '/.mcp/invoke-tool/$tool'
     | '/dashboard/$id'
     | '/event/$id'
     | '/join/$id/$roomId'
@@ -225,15 +167,10 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/forgot-password'
     | '/login'
-    | '/mcp'
     | '/reset-password'
-    | '/.mcp/list-tools'
-    | '/.well-known/oauth-protected-resource'
     | '/_authenticated/create-event'
     | '/_authenticated/my-events'
     | '/join/$id'
-    | '/.lovable/oauth/consent'
-    | '/.mcp/invoke-tool/$tool'
     | '/_authenticated/dashboard/$id'
     | '/_authenticated/event/$id'
     | '/join/$id/$roomId'
@@ -246,13 +183,8 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
-  McpRoute: typeof McpRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
-  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
-  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   JoinIdRoute: typeof JoinIdRouteWithChildren
-  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
-  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -262,13 +194,6 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mcp': {
-      id: '/mcp'
-      path: '/mcp'
-      fullPath: '/mcp'
-      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -320,20 +245,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCreateEventRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/.well-known/oauth-protected-resource': {
-      id: '/.well-known/oauth-protected-resource'
-      path: '/.well-known/oauth-protected-resource'
-      fullPath: '/.well-known/oauth-protected-resource'
-      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.mcp/list-tools': {
-      id: '/.mcp/list-tools'
-      path: '/.mcp/list-tools'
-      fullPath: '/.mcp/list-tools'
-      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/join/$id/': {
       id: '/join/$id/'
       path: '/'
@@ -361,20 +272,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/$id'
       preLoaderRoute: typeof AuthenticatedDashboardIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/.mcp/invoke-tool/$tool': {
-      id: '/.mcp/invoke-tool/$tool'
-      path: '/.mcp/invoke-tool/$tool'
-      fullPath: '/.mcp/invoke-tool/$tool'
-      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.lovable/oauth/consent': {
-      id: '/.lovable/oauth/consent'
-      path: '/.lovable/oauth/consent'
-      fullPath: '/.lovable/oauth/consent'
-      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/join/$id/confirm/$token': {
       id: '/join/$id/confirm/$token'
@@ -423,14 +320,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
-  McpRoute: McpRoute,
   ResetPasswordRoute: ResetPasswordRoute,
-  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
-  Char91DotwellKnownChar93OauthProtectedResourceRoute:
-    Char91DotwellKnownChar93OauthProtectedResourceRoute,
   JoinIdRoute: JoinIdRouteWithChildren,
-  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
-  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

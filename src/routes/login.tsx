@@ -77,7 +77,6 @@ function AuthPage() {
       setLoading(false);
     }
   };
-
   const onGoogle = async () => {
     setGoogleLoading(true);
 

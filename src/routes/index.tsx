@@ -5,7 +5,11 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Joinly — Quản lý sự kiện & người tham gia bằng QR" },
-      { name: "description", content: "Joinly giúp ban tổ chức tạo sự kiện, quản lý người tham gia bằng QR theo từng phòng và xem dữ liệu trong một dashboard duy nhất." },
+      {
+        name: "description",
+        content:
+          "Joinly giúp ban tổ chức tạo sự kiện, quản lý người tham gia bằng QR theo từng phòng và xem dữ liệu trong một dashboard duy nhất.",
+      },
     ],
   }),
   component: Landing,
@@ -35,9 +39,15 @@ function Header() {
           <span className="font-display text-xl font-bold tracking-tight">Joinly</span>
         </Link>
         <nav className="hidden items-center gap-8 text-sm font-medium text-muted-foreground md:flex">
-          <a href="#tinh-nang" className="transition-colors hover:text-foreground">Tính năng</a>
-          <a href="#cach-hoat-dong" className="transition-colors hover:text-foreground">Cách hoạt động</a>
-          <a href="#lien-he" className="transition-colors hover:text-foreground">Liên hệ</a>
+          <a href="#tinh-nang" className="transition-colors hover:text-foreground">
+            Tính năng
+          </a>
+          <a href="#cach-hoat-dong" className="transition-colors hover:text-foreground">
+            Cách hoạt động
+          </a>
+          <a href="#lien-he" className="transition-colors hover:text-foreground">
+            Liên hệ
+          </a>
         </nav>
         <div className="flex items-center gap-2">
           <Link
@@ -69,10 +79,7 @@ function Logo() {
 
 function Hero() {
   return (
-    <section
-      className="relative overflow-hidden"
-      style={{ background: "var(--gradient-hero)" }}
-    >
+    <section className="relative overflow-hidden" style={{ background: "var(--gradient-hero)" }}>
       <div className="mx-auto max-w-6xl px-6 py-24 md:py-32">
         <div className="mx-auto max-w-3xl text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-4 py-1.5 text-xs font-medium text-primary backdrop-blur">
@@ -84,8 +91,8 @@ function Hero() {
             <span className="text-primary whitespace-pre-line">{"\n"}gọn nhẹ trong một nơi</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
-            Joinly giúp bạn tạo sự kiện, để người tham gia join phòng bằng QR,
-            quản lý danh sách và xem dữ liệu trên một dashboard duy nhất.
+            Joinly giúp bạn tạo sự kiện, để người tham gia join phòng bằng QR, quản lý danh sách và
+            xem dữ liệu trên một dashboard duy nhất.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
@@ -104,7 +111,8 @@ function Hero() {
             </Link>
           </div>
           <p className="mt-6 text-sm text-muted-foreground">
-            Phù hợp với CLB, trường học, trung tâm đào tạo, doanh nghiệp, workshop, hội thảo, hội nghị, đám cưới và sự kiện cộng đồng.
+            Phù hợp với CLB, trường học, trung tâm đào tạo, doanh nghiệp, workshop, hội thảo, hội
+            nghị, đám cưới và sự kiện cộng đồng.
           </p>
         </div>
 
@@ -121,26 +129,53 @@ function HeroPreview() {
         className="relative overflow-hidden rounded-2xl border border-border bg-card p-2"
         style={{ boxShadow: "var(--shadow-elegant)" }}
       >
-          <div className="rounded-xl bg-gradient-to-br from-primary-soft to-background p-8">
-            <div className="grid gap-4 md:grid-cols-2">
-              <PreviewCard icon={<CalendarPlus className="h-5 w-5" />} title="Workshop UI/UX" meta="20 tháng 6 · 18:00" tone="primary" />
-              <PreviewCard icon={<Users className="h-5 w-5" />} title="142 người tham gia" meta="QR Room đang mở" />
-            </div>
+        <div className="rounded-xl bg-gradient-to-br from-primary-soft to-background p-8">
+          <div className="grid gap-4 md:grid-cols-2">
+            <PreviewCard
+              icon={<CalendarPlus className="h-5 w-5" />}
+              title="Workshop UI/UX"
+              meta="20 tháng 6 · 18:00"
+              tone="primary"
+            />
+            <PreviewCard
+              icon={<Users className="h-5 w-5" />}
+              title="142 người tham gia"
+              meta="QR Room đang mở"
+            />
           </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function PreviewCard({ icon, title, meta, tone }: { icon: React.ReactNode; title: string; meta: string; tone?: "primary" }) {
+function PreviewCard({
+  icon,
+  title,
+  meta,
+  tone,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  meta: string;
+  tone?: "primary";
+}) {
   const isPrimary = tone === "primary";
   return (
-    <div className={`rounded-xl border p-4 text-left ${isPrimary ? "border-primary/20 bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}>
-      <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg ${isPrimary ? "bg-primary-foreground/15" : "bg-primary-soft text-primary"}`}>
+    <div
+      className={`rounded-xl border p-4 text-left ${isPrimary ? "border-primary/20 bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
+    >
+      <div
+        className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg ${isPrimary ? "bg-primary-foreground/15" : "bg-primary-soft text-primary"}`}
+      >
         {icon}
       </div>
       <div className="text-sm font-semibold">{title}</div>
-      <div className={`mt-1 text-xs ${isPrimary ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{meta}</div>
+      <div
+        className={`mt-1 text-xs ${isPrimary ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+      >
+        {meta}
+      </div>
     </div>
   );
 }
@@ -170,7 +205,8 @@ function Features() {
           Những gì Joinly làm
         </h2>
         <p className="mt-4 text-lg text-muted-foreground">
-          Bốn việc cơ bản cho một sự kiện: tạo sự kiện, mở phòng QR, thu thông tin người tham gia, xem dữ liệu.
+          Bốn việc cơ bản cho một sự kiện: tạo sự kiện, mở phòng QR, thu thông tin người tham gia,
+          xem dữ liệu.
         </p>
       </div>
       <div className="mt-16 grid gap-6 md:grid-cols-3">
@@ -194,9 +230,21 @@ function Features() {
 
 function HowItWorks() {
   const steps = [
-    { n: "01", title: "Tạo sự kiện", desc: "Đăng nhập, tạo sự kiện và thêm các phòng tham gia bạn cần." },
-    { n: "02", title: "Chia sẻ QR", desc: "Mỗi phòng có một mã QR riêng. In ra hoặc chiếu lên màn hình tại sự kiện." },
-    { n: "03", title: "Xem dữ liệu", desc: "Theo dõi danh sách người tham gia theo từng phòng và xuất CSV khi cần." },
+    {
+      n: "01",
+      title: "Tạo sự kiện",
+      desc: "Đăng nhập, tạo sự kiện và thêm các phòng tham gia bạn cần.",
+    },
+    {
+      n: "02",
+      title: "Chia sẻ QR",
+      desc: "Mỗi phòng có một mã QR riêng. In ra hoặc chiếu lên màn hình tại sự kiện.",
+    },
+    {
+      n: "03",
+      title: "Xem dữ liệu",
+      desc: "Theo dõi danh sách người tham gia theo từng phòng và xuất CSV khi cần.",
+    },
   ];
   return (
     <section id="cach-hoat-dong" className="border-y border-border bg-secondary/50">
@@ -259,13 +307,28 @@ function CTA() {
 function Footer() {
   return (
     <footer id="lien-he" className="border-t border-border">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-10 sm:flex-row">
-        <div className="flex items-center gap-2">
-          <Logo />
-          <span className="font-display font-bold">Joinly</span>
-          <span className="text-sm text-muted-foreground">· Quản lý sự kiện bằng QR</span>
+      <div className="mx-auto max-w-6xl px-6 py-10">
+        <div className="flex flex-col items-center justify-between gap-5 sm:flex-row">
+          <div className="flex items-center gap-2">
+            <Logo />
+            <span className="font-display font-bold">Joinly</span>
+            <span className="text-sm text-muted-foreground">· Quản lý sự kiện bằng QR</span>
+          </div>
+
+          <div className="flex items-center gap-5 text-sm text-muted-foreground">
+            <Link to="/privacy" className="transition-colors hover:text-foreground">
+              Chính sách quyền riêng tư
+            </Link>
+
+            <Link to="/terms" className="transition-colors hover:text-foreground">
+              Điều khoản sử dụng
+            </Link>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} Joinly. Mọi quyền được bảo lưu.</p>
+
+        <p className="mt-6 text-center text-sm text-muted-foreground sm:text-left">
+          © {new Date().getFullYear()} Joinly. Mọi quyền được bảo lưu.
+        </p>
       </div>
     </footer>
   );

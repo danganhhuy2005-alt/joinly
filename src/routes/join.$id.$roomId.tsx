@@ -16,10 +16,16 @@ export const Route = createFileRoute("/join/$id/$roomId")({
   component: JoinRoomPage,
 });
 
-type EventRow = { id: string; name: string; description: string | null; location: string | null; starts_at: string | null };
+type EventRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  location: string | null;
+  starts_at: string | null;
+};
 type RoomRow = { id: string; name: string; event_id: string; has_access_code: boolean };
 
-type Step = "code" | "confirm" | "form";
+type Step = "code" | "confirm" | "form" | "not_allowed";
 
 function JoinRoomPage() {
   const { id, roomId } = useParams({ from: "/join/$id/$roomId" });
@@ -49,7 +55,11 @@ function JoinRoomPage() {
     }
     (async () => {
       const [{ data: ev }, { data: rm }] = await Promise.all([
-        supabase.from("events").select("id, name, description, location, starts_at").eq("id", id).maybeSingle(),
+        supabase
+          .from("events")
+          .select("id, name, description, location, starts_at")
+          .eq("id", id)
+          .maybeSingle(),
         (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> })
           .from("event_rooms_public")
           .select("id, name, event_id, has_access_code")
@@ -88,6 +98,14 @@ function JoinRoomPage() {
     }
   };
 
+  const resetParticipantForm = () => {
+    setName("");
+    setEmail("");
+    setPhone("");
+    setStudentId("");
+
+    setStep("form");
+  };
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedEmail = email.trim();
@@ -131,13 +149,23 @@ function JoinRoomPage() {
       setCodeVerified(null);
       return;
     }
+    if (result.status === "not_allowed") {
+      setStep("not_allowed");
+      return;
+    }
     if (result.status === "duplicate") {
-      toast.error("Email này đã tham gia phòng này rồi. Vui lòng mở lại liên kết xác nhận bạn đã lưu, hoặc liên hệ ban tổ chức.");
+      toast.error(
+        "Email hoặc MSSV này đã được đăng ký trong phòng. Vui lòng kiểm tra lại hoặc liên hệ ban tổ chức.",
+      );
       return;
     }
     if (room) setJoined(id, { roomId, roomName: room.name, token: result.token });
     toast.success("Đã ghi nhận đăng ký!");
-    navigate({ to: "/join/$id/confirm/$token", params: { id, token: result.token }, replace: true });
+    navigate({
+      to: "/join/$id/confirm/$token",
+      params: { id, token: result.token },
+      replace: true,
+    });
   };
 
   if (loading) {
@@ -152,7 +180,9 @@ function JoinRoomPage() {
       <div className="flex min-h-screen items-center justify-center bg-secondary/40 px-4 text-center">
         <div>
           <h1 className="font-display text-2xl font-bold">Không tìm thấy phòng</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Mã QR có thể đã hết hạn hoặc liên kết không hợp lệ.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Mã QR có thể đã hết hạn hoặc liên kết không hợp lệ.
+          </p>
         </div>
       </div>
     );
@@ -174,7 +204,9 @@ function JoinRoomPage() {
             <DoorOpen className="h-3.5 w-3.5" /> Phòng: {room.name}
           </div>
           <h1 className="mt-3 font-display text-2xl font-bold leading-tight">{event.name}</h1>
-          {event.description && <p className="mt-2 text-sm text-muted-foreground">{event.description}</p>}
+          {event.description && (
+            <p className="mt-2 text-sm text-muted-foreground">{event.description}</p>
+          )}
           <div className="mt-4 space-y-1.5 text-sm text-muted-foreground">
             {date && (
               <div className="flex items-center gap-2">
@@ -224,8 +256,8 @@ function JoinRoomPage() {
             <div className="mt-6 space-y-4">
               <div className="rounded-lg border border-border bg-secondary/40 p-4 text-sm">
                 <p className="text-foreground">
-                  Bạn đang tham gia phòng <span className="font-semibold">{room.name}</span> thuộc sự kiện{" "}
-                  <span className="font-semibold">{event.name}</span>.
+                  Bạn đang tham gia phòng <span className="font-semibold">{room.name}</span> thuộc
+                  sự kiện <span className="font-semibold">{event.name}</span>.
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   Vui lòng kiểm tra kỹ thông tin phòng trước khi tiếp tục để tránh đăng ký nhầm.
@@ -240,30 +272,87 @@ function JoinRoomPage() {
               )}
             </div>
           )}
+          {step === "not_allowed" && (
+            <div className="mt-6 space-y-4">
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-center">
+                <h2 className="font-display text-xl font-semibold">Không thể tham gia</h2>
+
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Thông tin của bạn chưa nằm trong danh sách được phép tham gia sự kiện hoặc phòng
+                  này.
+                </p>
+
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Có thể bạn đã nhập sai thông tin. Vui lòng nhập lại từ đầu hoặc liên hệ ban tổ
+                  chức.
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                size="lg"
+                variant="outline"
+                className="w-full"
+                onClick={resetParticipantForm}
+              >
+                Nhập lại từ đầu
+              </Button>
+            </div>
+          )}
 
           {step === "form" && (
             <form onSubmit={onSubmit} className="mt-6 space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="pname">Họ và tên *</Label>
-                <Input id="pname" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nguyễn Văn A" />
+                <Input
+                  id="pname"
+                  required
+                  maxLength={100}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Nguyễn Văn A"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="pemail">Email *</Label>
-                <Input id="pemail" type="email" required maxLength={255} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ban@example.com" />
+                <Input
+                  id="pemail"
+                  type="email"
+                  required
+                  maxLength={255}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="ban@example.com"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="pphone">Số điện thoại</Label>
-                <Input id="pphone" type="tel" maxLength={20} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="09xx xxx xxx" />
+                <Input
+                  id="pphone"
+                  type="tel"
+                  maxLength={20}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="09xx xxx xxx"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="psid">Mã số sinh viên</Label>
-                <Input id="psid" maxLength={30} value={studentId} onChange={(e) => setStudentId(e.target.value)} placeholder="VD: 22000123" />
+                <Input
+                  id="psid"
+                  maxLength={30}
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  placeholder="VD: 22000123"
+                />
               </div>
               <Button type="submit" size="lg" className="w-full" disabled={submitting}>
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                 Tham gia phòng {room.name}
               </Button>
-              <p className="text-center text-xs text-muted-foreground">Bạn không cần tạo tài khoản để tham gia.</p>
+              <p className="text-center text-xs text-muted-foreground">
+                Bạn không cần tạo tài khoản để tham gia.
+              </p>
             </form>
           )}
         </div>

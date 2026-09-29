@@ -1,14 +1,27 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, QrCode, Copy, Check, Loader2, DoorOpen, Users, Calendar, MapPin, KeyRound, Lock, LockOpen } from "lucide-react";
+import {
+  ArrowLeft,
+  QrCode,
+  Copy,
+  Check,
+  Loader2,
+  DoorOpen,
+  Users,
+  Calendar,
+  MapPin,
+  KeyRound,
+  Lock,
+  LockOpen,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getRoomAccessCode, updateRoomAccessCode } from "@/lib/room-access.functions";
-
+import { getEventRole, type EventRole } from "@/lib/event-role";
 
 export const Route = createFileRoute("/_authenticated/event/$id")({
   head: () => ({ meta: [{ title: "Phòng sự kiện — Joinly" }] }),
@@ -24,9 +37,20 @@ type Ev = {
 };
 type Room = { id: string; name: string; has_access_code: boolean };
 
-function RoomCard({ eventId, room, onCodeChanged }: { eventId: string; room: Room; onCodeChanged: (roomId: string, hasCode: boolean) => void }) {
+function RoomCard({
+  eventId,
+  room,
+  canEditCode,
+  onCodeChanged,
+}: {
+  eventId: string;
+  room: Room;
+  canEditCode: boolean;
+  onCodeChanged: (roomId: string, hasCode: boolean) => void;
+}) {
   const [copied, setCopied] = useState(false);
-  const joinUrl = typeof window !== "undefined" ? `${window.location.origin}/join/${eventId}/${room.id}` : "";
+  const joinUrl =
+    typeof window !== "undefined" ? `${window.location.origin}/join/${eventId}/${room.id}` : "";
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
 
   const readCode = useServerFn(getRoomAccessCode);
@@ -114,9 +138,10 @@ function RoomCard({ eventId, room, onCodeChanged }: { eventId: string; room: Roo
               </>
             )}
           </div>
-          {!editing && (
+          {canEditCode && !editing && (
             <Button type="button" size="sm" variant="outline" onClick={openEditor}>
               <KeyRound className="h-3.5 w-3.5" />
+
               {room.has_access_code ? "Đổi mã" : "Đặt mã"}
             </Button>
           )}
@@ -140,7 +165,13 @@ function RoomCard({ eventId, room, onCodeChanged }: { eventId: string; room: Roo
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 Lưu
               </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={saving}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditing(false)}
+                disabled={saving}
+              >
                 Huỷ
               </Button>
             </div>
@@ -151,25 +182,31 @@ function RoomCard({ eventId, room, onCodeChanged }: { eventId: string; room: Roo
   );
 }
 
-
 function EventRoom() {
   const { id } = useParams({ from: "/_authenticated/event/$id" });
   const [event, setEvent] = useState<Ev | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [role, setRole] = useState<EventRole>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const [{ data: ev }, { data: rms }] = await Promise.all([
+      const [{ data: ev }, { data: rms }, currentRole] = await Promise.all([
         supabase
           .from("events")
           .select("name, description, location, starts_at, expected_attendees")
           .eq("id", id)
           .maybeSingle(),
-        supabase.from("event_rooms").select("id, name, has_access_code").eq("event_id", id).order("position", { ascending: true }),
+        supabase
+          .from("event_rooms")
+          .select("id, name, has_access_code")
+          .eq("event_id", id)
+          .order("position", { ascending: true }),
+        getEventRole(id),
       ]);
       setEvent(ev as Ev | null);
       setRooms((rms ?? []) as Room[]);
+      setRole(currentRole);
 
       setLoading(false);
     })();
@@ -183,7 +220,11 @@ function EventRoom() {
     );
   }
   if (!event) {
-    return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Không tìm thấy sự kiện</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Không tìm thấy sự kiện
+      </div>
+    );
   }
 
   const date = event.starts_at ? new Date(event.starts_at) : null;
@@ -191,8 +232,13 @@ function EventRoom() {
   return (
     <div className="min-h-screen bg-secondary/30 px-4 py-12">
       <div className="mx-auto max-w-5xl">
-        <Link to="/my-events" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Sự kiện của tôi
+        <Link
+          to="/manage-event/$id"
+          params={{ id }}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Quay lại sự kiện
         </Link>
 
         <div className="mt-6 rounded-2xl border border-border bg-card p-8 shadow-sm">
@@ -200,7 +246,9 @@ function EventRoom() {
             <QrCode className="h-3.5 w-3.5" /> Phòng sự kiện
           </div>
           <h1 className="mt-3 font-display text-3xl font-bold">{event.name}</h1>
-          {event.description && <p className="mt-2 text-sm text-muted-foreground">{event.description}</p>}
+          {event.description && (
+            <p className="mt-2 text-sm text-muted-foreground">{event.description}</p>
+          )}
           <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
             {date && (
               <span className="inline-flex items-center gap-1.5">
@@ -228,7 +276,8 @@ function EventRoom() {
             <DoorOpen className="h-5 w-5 text-primary" /> Phòng tham gia ({rooms.length})
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Mỗi phòng có mã QR và liên kết riêng. Người tham gia quét mã QR sẽ được dẫn tới biểu mẫu đăng ký cho phòng đó.
+            Mỗi phòng có mã QR và liên kết riêng. Người tham gia quét mã QR sẽ được dẫn tới biểu mẫu
+            đăng ký cho phòng đó.
           </p>
 
           {rooms.length === 0 ? (
@@ -242,11 +291,13 @@ function EventRoom() {
                   key={r.id}
                   eventId={id}
                   room={r}
+                  canEditCode={role === "owner" || role === "co_owner"}
                   onCodeChanged={(roomId, hasCode) =>
-                    setRooms((rs) => rs.map((x) => (x.id === roomId ? { ...x, has_access_code: hasCode } : x)))
+                    setRooms((rs) =>
+                      rs.map((x) => (x.id === roomId ? { ...x, has_access_code: hasCode } : x)),
+                    )
                   }
                 />
-
               ))}
             </div>
           )}

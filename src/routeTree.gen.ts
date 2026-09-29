@@ -21,9 +21,13 @@ import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedCreateEventRouteImport } from './routes/_authenticated/create-event'
 import { Route as JoinIdIndexRouteImport } from './routes/join.$id.index'
 import { Route as JoinIdRoomIdRouteImport } from './routes/join.$id.$roomId'
+import { Route as AuthenticatedManageEventIdRouteImport } from './routes/_authenticated/manage-event.$id'
 import { Route as AuthenticatedEventIdRouteImport } from './routes/_authenticated/event.$id'
+import { Route as AuthenticatedEditEventIdRouteImport } from './routes/_authenticated/edit-event.$id'
 import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
 import { Route as JoinIdConfirmTokenRouteImport } from './routes/join.$id.confirm.$token'
+import { Route as AuthenticatedDashboardIdMembersRouteImport } from './routes/_authenticated/dashboard_.$id.members'
+import { Route as AuthenticatedDashboardIdAllowlistTsxRouteImport } from './routes/_authenticated/dashboard_.$id.allowlist.tsx'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -85,11 +89,23 @@ const JoinIdRoomIdRoute = JoinIdRoomIdRouteImport.update({
   path: '/$roomId',
   getParentRoute: () => JoinIdRoute,
 } as any)
+const AuthenticatedManageEventIdRoute =
+  AuthenticatedManageEventIdRouteImport.update({
+    id: '/manage-event/$id',
+    path: '/manage-event/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedEventIdRoute = AuthenticatedEventIdRouteImport.update({
   id: '/event/$id',
   path: '/event/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedEditEventIdRoute =
+  AuthenticatedEditEventIdRouteImport.update({
+    id: '/edit-event/$id',
+    path: '/edit-event/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardIdRoute =
   AuthenticatedDashboardIdRouteImport.update({
     id: '/dashboard/$id',
@@ -101,6 +117,18 @@ const JoinIdConfirmTokenRoute = JoinIdConfirmTokenRouteImport.update({
   path: '/confirm/$token',
   getParentRoute: () => JoinIdRoute,
 } as any)
+const AuthenticatedDashboardIdMembersRoute =
+  AuthenticatedDashboardIdMembersRouteImport.update({
+    id: '/dashboard_/$id/members',
+    path: '/dashboard/$id/members',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDashboardIdAllowlistTsxRoute =
+  AuthenticatedDashboardIdAllowlistTsxRouteImport.update({
+    id: '/dashboard_/$id/allowlist/tsx',
+    path: '/dashboard/$id/allowlist/tsx',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -113,10 +141,14 @@ export interface FileRoutesByFullPath {
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
+  '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
+  '/manage-event/$id': typeof AuthenticatedManageEventIdRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id/': typeof JoinIdIndexRoute
+  '/dashboard/$id/members': typeof AuthenticatedDashboardIdMembersRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
+  '/dashboard/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -128,10 +160,14 @@ export interface FileRoutesByTo {
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
+  '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
+  '/manage-event/$id': typeof AuthenticatedManageEventIdRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id': typeof JoinIdIndexRoute
+  '/dashboard/$id/members': typeof AuthenticatedDashboardIdMembersRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
+  '/dashboard/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -146,10 +182,14 @@ export interface FileRoutesById {
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
+  '/_authenticated/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/_authenticated/event/$id': typeof AuthenticatedEventIdRoute
+  '/_authenticated/manage-event/$id': typeof AuthenticatedManageEventIdRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id/': typeof JoinIdIndexRoute
+  '/_authenticated/dashboard_/$id/members': typeof AuthenticatedDashboardIdMembersRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
+  '/_authenticated/dashboard_/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -164,10 +204,14 @@ export interface FileRouteTypes {
     | '/my-events'
     | '/join/$id'
     | '/dashboard/$id'
+    | '/edit-event/$id'
     | '/event/$id'
+    | '/manage-event/$id'
     | '/join/$id/$roomId'
     | '/join/$id/'
+    | '/dashboard/$id/members'
     | '/join/$id/confirm/$token'
+    | '/dashboard/$id/allowlist/tsx'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -179,10 +223,14 @@ export interface FileRouteTypes {
     | '/create-event'
     | '/my-events'
     | '/dashboard/$id'
+    | '/edit-event/$id'
     | '/event/$id'
+    | '/manage-event/$id'
     | '/join/$id/$roomId'
     | '/join/$id'
+    | '/dashboard/$id/members'
     | '/join/$id/confirm/$token'
+    | '/dashboard/$id/allowlist/tsx'
   id:
     | '__root__'
     | '/'
@@ -196,10 +244,14 @@ export interface FileRouteTypes {
     | '/_authenticated/my-events'
     | '/join/$id'
     | '/_authenticated/dashboard/$id'
+    | '/_authenticated/edit-event/$id'
     | '/_authenticated/event/$id'
+    | '/_authenticated/manage-event/$id'
     | '/join/$id/$roomId'
     | '/join/$id/'
+    | '/_authenticated/dashboard_/$id/members'
     | '/join/$id/confirm/$token'
+    | '/_authenticated/dashboard_/$id/allowlist/tsx'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -299,11 +351,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JoinIdRoomIdRouteImport
       parentRoute: typeof JoinIdRoute
     }
+    '/_authenticated/manage-event/$id': {
+      id: '/_authenticated/manage-event/$id'
+      path: '/manage-event/$id'
+      fullPath: '/manage-event/$id'
+      preLoaderRoute: typeof AuthenticatedManageEventIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/event/$id': {
       id: '/_authenticated/event/$id'
       path: '/event/$id'
       fullPath: '/event/$id'
       preLoaderRoute: typeof AuthenticatedEventIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/edit-event/$id': {
+      id: '/_authenticated/edit-event/$id'
+      path: '/edit-event/$id'
+      fullPath: '/edit-event/$id'
+      preLoaderRoute: typeof AuthenticatedEditEventIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard/$id': {
@@ -320,6 +386,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JoinIdConfirmTokenRouteImport
       parentRoute: typeof JoinIdRoute
     }
+    '/_authenticated/dashboard_/$id/members': {
+      id: '/_authenticated/dashboard_/$id/members'
+      path: '/dashboard/$id/members'
+      fullPath: '/dashboard/$id/members'
+      preLoaderRoute: typeof AuthenticatedDashboardIdMembersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard_/$id/allowlist/tsx': {
+      id: '/_authenticated/dashboard_/$id/allowlist/tsx'
+      path: '/dashboard/$id/allowlist/tsx'
+      fullPath: '/dashboard/$id/allowlist/tsx'
+      preLoaderRoute: typeof AuthenticatedDashboardIdAllowlistTsxRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -327,14 +407,23 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCreateEventRoute: typeof AuthenticatedCreateEventRoute
   AuthenticatedMyEventsRoute: typeof AuthenticatedMyEventsRoute
   AuthenticatedDashboardIdRoute: typeof AuthenticatedDashboardIdRoute
+  AuthenticatedEditEventIdRoute: typeof AuthenticatedEditEventIdRoute
   AuthenticatedEventIdRoute: typeof AuthenticatedEventIdRoute
+  AuthenticatedManageEventIdRoute: typeof AuthenticatedManageEventIdRoute
+  AuthenticatedDashboardIdMembersRoute: typeof AuthenticatedDashboardIdMembersRoute
+  AuthenticatedDashboardIdAllowlistTsxRoute: typeof AuthenticatedDashboardIdAllowlistTsxRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCreateEventRoute: AuthenticatedCreateEventRoute,
   AuthenticatedMyEventsRoute: AuthenticatedMyEventsRoute,
   AuthenticatedDashboardIdRoute: AuthenticatedDashboardIdRoute,
+  AuthenticatedEditEventIdRoute: AuthenticatedEditEventIdRoute,
   AuthenticatedEventIdRoute: AuthenticatedEventIdRoute,
+  AuthenticatedManageEventIdRoute: AuthenticatedManageEventIdRoute,
+  AuthenticatedDashboardIdMembersRoute: AuthenticatedDashboardIdMembersRoute,
+  AuthenticatedDashboardIdAllowlistTsxRoute:
+    AuthenticatedDashboardIdAllowlistTsxRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

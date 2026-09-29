@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { EventLocationPicker } from "@/components/EventLocationPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -34,13 +35,16 @@ const schema = z.object({
   rooms: z.array(roomSchema).min(1, "Cần ít nhất một phòng"),
 });
 
-
 function CreateEvent() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [checkinRadius, setCheckinRadius] = useState("200");
+  const [gettingLocation, setGettingLocation] = useState(false);
   const [startsAt, setStartsAt] = useState("");
   const currentYear = new Date().getFullYear();
   const minStartsAt = (() => {
@@ -60,9 +64,46 @@ function CreateEvent() {
   const addRoom = () => setRooms((r) => [...r, { name: "", accessCode: "" }]);
   const removeRoom = (i: number) => setRooms((r) => r.filter((_, idx) => idx !== i));
 
+  const getEventLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Trình duyệt không hỗ trợ lấy vị trí");
+      return;
+    }
 
+    setGettingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(position.coords.latitude);
+        setLongitude(position.coords.longitude);
+        setGettingLocation(false);
+
+        alert("Đã lấy vị trí sự kiện thành công");
+      },
+      () => {
+        setGettingLocation(false);
+        alert("Không thể lấy vị trí. Hãy cho phép quyền vị trí.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      },
+    );
+  };
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (latitude === null || longitude === null) {
+      alert("Vui lòng lấy vị trí sự kiện trước khi tạo");
+      return;
+    }
+
+    const radius = Number(checkinRadius);
+
+    if (!radius || radius < 20 || radius > 5000) {
+      alert("Bán kính check-in phải từ 20m đến 5000m");
+      return;
+    }
     const parsed = schema.safeParse({
       name,
       description: description || undefined,
@@ -89,9 +130,10 @@ function CreateEvent() {
       return;
     }
 
-
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Phiên đăng nhập đã hết hạn");
       navigate({ to: "/login" });
@@ -104,6 +146,10 @@ function CreateEvent() {
         name: parsed.data.name,
         description: parsed.data.description ?? null,
         location: parsed.data.location ?? null,
+
+        latitude: latitude,
+        longitude: longitude,
+        checkin_radius: Number(checkinRadius),
         starts_at: new Date(parsed.data.startsAt).toISOString(),
         expected_attendees: parsed.data.expected ?? null,
       })
@@ -138,32 +184,104 @@ function CreateEvent() {
   return (
     <div className="min-h-screen bg-secondary/30 px-4 py-12">
       <div className="mx-auto max-w-2xl">
-        <Link to="/my-events" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <Link
+          to="/my-events"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
           <ArrowLeft className="h-4 w-4" /> Quay lại
         </Link>
         <div className="mt-6 rounded-2xl border border-border bg-card p-8 shadow-sm">
           <h1 className="font-display text-2xl font-bold">Tạo sự kiện mới</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Điền thông tin để khởi tạo phòng QR cho sự kiện.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Điền thông tin để khởi tạo phòng QR cho sự kiện.
+          </p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-5">
             <div className="space-y-1.5">
               <Label htmlFor="name">Tên sự kiện *</Label>
-              <Input id="name" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} placeholder="Workshop UI/UX cơ bản" />
+              <Input
+                id="name"
+                required
+                maxLength={120}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Workshop UI/UX cơ bản"
+              />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="desc">Mô tả</Label>
-              <Textarea id="desc" rows={4} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Mô tả ngắn về sự kiện..." />
+              <Textarea
+                id="desc"
+                rows={4}
+                maxLength={2000}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Mô tả ngắn về sự kiện..."
+              />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="when">Ngày & giờ *</Label>
-                <Input id="when" type="datetime-local" required min={minStartsAt} max={maxStartsAt} value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+                <Input
+                  id="when"
+                  type="datetime-local"
+                  required
+                  min={minStartsAt}
+                  max={maxStartsAt}
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="loc">Địa điểm</Label>
-                <Input id="loc" maxLength={200} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Phòng 102, Tòa nhà ABC" />
+                <Input
+                  id="loc"
+                  maxLength={200}
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="Phòng 102, Tòa nhà ABC"
+                />
+              </div>
+              <div className="space-y-3 rounded-lg border p-4">
+                <div>
+                  <Label>Xác minh vị trí khi check-in</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Người tham gia phải ở trong bán kính cho phép của sự kiện.
+                  </p>
+                </div>
+
+                <EventLocationPicker
+                  latitude={latitude}
+                  longitude={longitude}
+                  onChange={(lat, lng) => {
+                    setLatitude(lat);
+                    setLongitude(lng);
+                  }}
+                />
+
+                {latitude !== null && longitude !== null && (
+                  <p className="text-xs text-green-600">✓ Đã lấy vị trí sự kiện</p>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="checkin-radius">Bán kính cho phép check-in</Label>
+
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="checkin-radius"
+                      type="number"
+                      min={20}
+                      max={5000}
+                      value={checkinRadius}
+                      onChange={(e) => setCheckinRadius(e.target.value)}
+                      placeholder="200"
+                    />
+
+                    <span className="text-sm text-muted-foreground">mét</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -198,7 +316,9 @@ function CreateEvent() {
                         value={r.name}
                         maxLength={80}
                         onChange={(e) => updateRoomName(i, e.target.value)}
-                        placeholder={i === 0 ? "Hội trường chính" : i === 1 ? "Phòng 2" : "Workshop A"}
+                        placeholder={
+                          i === 0 ? "Hội trường chính" : i === 1 ? "Phòng 2" : "Workshop A"
+                        }
                       />
                       <Button
                         type="button"

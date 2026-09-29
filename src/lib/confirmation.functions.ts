@@ -1,25 +1,29 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-export const getParticipantConfirmation = createServerFn({ method: "GET" })
+export const getParticipantConfirmation = createServerFn({ method: "POST" })
   .inputValidator((data) => z.object({ token: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
       .from("participants")
       .select(
-        "id, full_name, email, event_id, room_id, events:event_id(name, description, location, starts_at), event_rooms:room_id(name)",
+        "id, full_name, event_id, room_id, events:event_id(name, description, location, starts_at), event_rooms:room_id(name)",
       )
       .eq("confirmation_token", data.token)
       .maybeSingle();
     if (error) throw error;
     if (!row) return null;
-    const event = row.events as { name: string; description: string | null; location: string | null; starts_at: string | null } | null;
+    const event = row.events as {
+      name: string;
+      description: string | null;
+      location: string | null;
+      starts_at: string | null;
+    } | null;
     const room = row.event_rooms as { name: string } | null;
     return {
       participant_id: row.id,
       full_name: row.full_name,
-      email: row.email,
       event_id: row.event_id,
       event_name: event?.name ?? "",
       event_description: event?.description ?? null,
@@ -70,5 +74,3 @@ export const registerParticipant = createServerFn({ method: "POST" })
       accessCode: data.accessCode,
     });
   });
-
-

@@ -31,8 +31,8 @@ export const verifyRoomAccessCode = createServerFn({ method: "POST" })
     if (!stored) return { ok: true as const }; // Room has no code; treat as open.
     const provided = data.code.trim().toUpperCase();
     return stored === provided
-      ? ({ ok: true as const })
-      : ({ ok: false as const, reason: "wrong_code" as const });
+      ? { ok: true as const }
+      : { ok: false as const, reason: "wrong_code" as const };
   });
 
 // Organizer-only: read the current access code for a room they own.
@@ -43,13 +43,24 @@ export const getRoomAccessCode = createServerFn({ method: "POST" })
     // Ownership check via RLS-scoped client.
     const { data: room, error } = await context.supabase
       .from("event_rooms")
-      .select("id, event_id, events:event_id(organizer_id)")
+      .select("id, event_id")
       .eq("id", data.roomId)
       .maybeSingle();
+
     if (error) throw error;
-    const evt = room?.events as { organizer_id: string } | null;
-    if (!room || !evt || evt.organizer_id !== context.userId) {
-      throw new Error("Forbidden");
+
+    if (!room) {
+      throw new Error("Không tìm thấy phòng.");
+    }
+
+    const { data: role, error: roleError } = await context.supabase.rpc("get_event_role", {
+      _event_id: room.event_id,
+    });
+
+    if (roleError) throw roleError;
+
+    if (role !== "owner" && role !== "co_owner") {
+      throw new Error("Bạn không có quyền xem hoặc thay đổi mã phòng.");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: full, error: fullErr } = await supabaseAdmin
@@ -76,13 +87,24 @@ export const updateRoomAccessCode = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { data: room, error } = await context.supabase
       .from("event_rooms")
-      .select("id, event_id, events:event_id(organizer_id)")
+      .select("id, event_id")
       .eq("id", data.roomId)
       .maybeSingle();
+
     if (error) throw error;
-    const evt = room?.events as { organizer_id: string } | null;
-    if (!room || !evt || evt.organizer_id !== context.userId) {
-      throw new Error("Forbidden");
+
+    if (!room) {
+      throw new Error("Không tìm thấy phòng.");
+    }
+
+    const { data: role, error: roleError } = await context.supabase.rpc("get_event_role", {
+      _event_id: room.event_id,
+    });
+
+    if (roleError) throw roleError;
+
+    if (role !== "owner" && role !== "co_owner") {
+      throw new Error("Bạn không có quyền thay đổi mã phòng.");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const value = data.accessCode ? String(data.accessCode).toUpperCase() : null;

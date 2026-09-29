@@ -5,7 +5,13 @@ import { Sparkles, Check, Calendar, MapPin, Loader2, DoorOpen, Bookmark } from "
 import { getParticipantConfirmation } from "@/lib/confirmation.functions";
 
 export const Route = createFileRoute("/join/$id/confirm/$token")({
-  head: () => ({ meta: [{ title: "Xác nhận tham gia — Joinly" }] }),
+  head: () => ({
+    meta: [
+      { title: "Xác nhận tham gia — Joinly" },
+      { name: "referrer", content: "no-referrer" },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
   component: ConfirmationPage,
 });
 
@@ -42,7 +48,9 @@ function ConfirmationPage() {
       <div className="flex min-h-screen items-center justify-center bg-secondary/40 px-4 text-center">
         <div>
           <h1 className="font-display text-2xl font-bold">Không tìm thấy xác nhận</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Liên kết xác nhận không hợp lệ hoặc đã thay đổi.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Liên kết xác nhận không hợp lệ hoặc đã thay đổi.
+          </p>
         </div>
       </div>
     );
@@ -102,14 +110,15 @@ function ConfirmationPage() {
               <div className="text-xs text-foreground">
                 <p className="font-medium">Lưu lại trang này</p>
                 <p className="mt-1 text-muted-foreground">
-                  Đánh dấu (bookmark) hoặc chụp màn hình liên kết hiện tại để xem lại từ bất kỳ thiết bị nào.
+                  Đánh dấu (bookmark) hoặc chụp màn hình liên kết hiện tại để xem lại từ bất kỳ
+                  thiết bị nào.
                 </p>
               </div>
             </div>
           </div>
 
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            Người tham gia: {data.full_name} • {data.email}
+            Người tham gia: {data.full_name}
           </p>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             Nếu cần đổi phòng, vui lòng liên hệ ban tổ chức.

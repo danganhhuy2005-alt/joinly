@@ -266,11 +266,16 @@ function ManageEvent() {
   };
 
   const visibleAllowlist = allowlist.filter((person) => {
+    // Toàn sự kiện:
+    // hiển thị tất cả người, kể cả người thuộc từng phòng
     if (event?.allowlist_scope === "event") {
-      return person.room_id === null;
+      return true;
     }
 
-    return person.room_id === selectedAllowlistRoomId;
+    // Theo từng phòng:
+    // hiển thị người chung toàn sự kiện
+    // + người của phòng đang chọn
+    return person.room_id === null || person.room_id === selectedAllowlistRoomId;
   });
 
   const allowlistPreview = visibleAllowlist.slice(0, 2);
@@ -359,6 +364,12 @@ function ManageEvent() {
               <Link to="/dashboard/$id" params={{ id }}>
                 <BarChart3 className="h-4 w-4" />
                 Dashboard
+              </Link>
+            </Button>
+
+            <Button variant="outline" asChild>
+              <Link to="/check-in/$id" params={{ id }}>
+                Check-in / Check-out
               </Link>
             </Button>
 

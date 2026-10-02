@@ -9,44 +9,34 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as JoinIdRouteImport } from './routes/join.$id'
-import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AuthenticatedCreateEventRouteImport } from './routes/_authenticated/create-event'
+import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
+import { Route as JoinIdRouteImport } from './routes/join.$id'
+import { Route as AuthenticatedCheckInIdRouteImport } from './routes/_authenticated/check-in.$id'
+import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
+import { Route as AuthenticatedEditEventIdRouteImport } from './routes/_authenticated/edit-event.$id'
+import { Route as AuthenticatedEventIdRouteImport } from './routes/_authenticated/event.$id'
+import { Route as AuthenticatedManageEventIdRouteImport } from './routes/_authenticated/manage-event.$id'
 import { Route as JoinIdIndexRouteImport } from './routes/join.$id.index'
 import { Route as JoinIdRoomIdRouteImport } from './routes/join.$id.$roomId'
-import { Route as AuthenticatedManageEventIdRouteImport } from './routes/_authenticated/manage-event.$id'
-import { Route as AuthenticatedEventIdRouteImport } from './routes/_authenticated/event.$id'
-import { Route as AuthenticatedEditEventIdRouteImport } from './routes/_authenticated/edit-event.$id'
-import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
-import { Route as JoinIdConfirmTokenRouteImport } from './routes/join.$id.confirm.$token'
 import { Route as AuthenticatedDashboardIdMembersRouteImport } from './routes/_authenticated/dashboard_.$id.members'
+import { Route as JoinIdConfirmTokenRouteImport } from './routes/join.$id.confirm.$token'
 import { Route as AuthenticatedDashboardIdAllowlistTsxRouteImport } from './routes/_authenticated/dashboard_.$id.allowlist.tsx'
 
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -54,29 +44,68 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedCreateEventRoute =
+  AuthenticatedCreateEventRouteImport.update({
+    id: '/create-event',
+    path: '/create-event',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMyEventsRoute = AuthenticatedMyEventsRouteImport.update({
+  id: '/my-events',
+  path: '/my-events',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const JoinIdRoute = JoinIdRouteImport.update({
   id: '/join/$id',
   path: '/join/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedMyEventsRoute = AuthenticatedMyEventsRouteImport.update({
-  id: '/my-events',
-  path: '/my-events',
+const AuthenticatedCheckInIdRoute = AuthenticatedCheckInIdRouteImport.update({
+  id: '/check-in/$id',
+  path: '/check-in/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedCreateEventRoute =
-  AuthenticatedCreateEventRouteImport.update({
-    id: '/create-event',
-    path: '/create-event',
+const AuthenticatedDashboardIdRoute =
+  AuthenticatedDashboardIdRouteImport.update({
+    id: '/dashboard/$id',
+    path: '/dashboard/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEditEventIdRoute =
+  AuthenticatedEditEventIdRouteImport.update({
+    id: '/edit-event/$id',
+    path: '/edit-event/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEventIdRoute = AuthenticatedEventIdRouteImport.update({
+  id: '/event/$id',
+  path: '/event/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedManageEventIdRoute =
+  AuthenticatedManageEventIdRouteImport.update({
+    id: '/manage-event/$id',
+    path: '/manage-event/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const JoinIdIndexRoute = JoinIdIndexRouteImport.update({
@@ -89,27 +118,10 @@ const JoinIdRoomIdRoute = JoinIdRoomIdRouteImport.update({
   path: '/$roomId',
   getParentRoute: () => JoinIdRoute,
 } as any)
-const AuthenticatedManageEventIdRoute =
-  AuthenticatedManageEventIdRouteImport.update({
-    id: '/manage-event/$id',
-    path: '/manage-event/$id',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedEventIdRoute = AuthenticatedEventIdRouteImport.update({
-  id: '/event/$id',
-  path: '/event/$id',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedEditEventIdRoute =
-  AuthenticatedEditEventIdRouteImport.update({
-    id: '/edit-event/$id',
-    path: '/edit-event/$id',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedDashboardIdRoute =
-  AuthenticatedDashboardIdRouteImport.update({
-    id: '/dashboard/$id',
-    path: '/dashboard/$id',
+const AuthenticatedDashboardIdMembersRoute =
+  AuthenticatedDashboardIdMembersRouteImport.update({
+    id: '/dashboard_/$id/members',
+    path: '/dashboard/$id/members',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const JoinIdConfirmTokenRoute = JoinIdConfirmTokenRouteImport.update({
@@ -117,12 +129,6 @@ const JoinIdConfirmTokenRoute = JoinIdConfirmTokenRouteImport.update({
   path: '/confirm/$token',
   getParentRoute: () => JoinIdRoute,
 } as any)
-const AuthenticatedDashboardIdMembersRoute =
-  AuthenticatedDashboardIdMembersRouteImport.update({
-    id: '/dashboard_/$id/members',
-    path: '/dashboard/$id/members',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedDashboardIdAllowlistTsxRoute =
   AuthenticatedDashboardIdAllowlistTsxRouteImport.update({
     id: '/dashboard_/$id/allowlist/tsx',
@@ -140,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/join/$id': typeof JoinIdRouteWithChildren
+  '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
@@ -159,6 +166,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
+  '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
@@ -181,6 +189,7 @@ export interface FileRoutesById {
   '/_authenticated/create-event': typeof AuthenticatedCreateEventRoute
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
   '/join/$id': typeof JoinIdRouteWithChildren
+  '/_authenticated/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/_authenticated/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/_authenticated/event/$id': typeof AuthenticatedEventIdRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/create-event'
     | '/my-events'
     | '/join/$id'
+    | '/check-in/$id'
     | '/dashboard/$id'
     | '/edit-event/$id'
     | '/event/$id'
@@ -222,6 +232,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/create-event'
     | '/my-events'
+    | '/check-in/$id'
     | '/dashboard/$id'
     | '/edit-event/$id'
     | '/event/$id'
@@ -243,6 +254,7 @@ export interface FileRouteTypes {
     | '/_authenticated/create-event'
     | '/_authenticated/my-events'
     | '/join/$id'
+    | '/_authenticated/check-in/$id'
     | '/_authenticated/dashboard/$id'
     | '/_authenticated/edit-event/$id'
     | '/_authenticated/event/$id'
@@ -267,39 +279,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -309,19 +293,47 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/join/$id': {
-      id: '/join/$id'
-      path: '/join/$id'
-      fullPath: '/join/$id'
-      preLoaderRoute: typeof JoinIdRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/create-event': {
+      id: '/_authenticated/create-event'
+      path: '/create-event'
+      fullPath: '/create-event'
+      preLoaderRoute: typeof AuthenticatedCreateEventRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/my-events': {
       id: '/_authenticated/my-events'
@@ -330,11 +342,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMyEventsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/create-event': {
-      id: '/_authenticated/create-event'
-      path: '/create-event'
-      fullPath: '/create-event'
-      preLoaderRoute: typeof AuthenticatedCreateEventRouteImport
+    '/join/$id': {
+      id: '/join/$id'
+      path: '/join/$id'
+      fullPath: '/join/$id'
+      preLoaderRoute: typeof JoinIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/check-in/$id': {
+      id: '/_authenticated/check-in/$id'
+      path: '/check-in/$id'
+      fullPath: '/check-in/$id'
+      preLoaderRoute: typeof AuthenticatedCheckInIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard/$id': {
+      id: '/_authenticated/dashboard/$id'
+      path: '/dashboard/$id'
+      fullPath: '/dashboard/$id'
+      preLoaderRoute: typeof AuthenticatedDashboardIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/edit-event/$id': {
+      id: '/_authenticated/edit-event/$id'
+      path: '/edit-event/$id'
+      fullPath: '/edit-event/$id'
+      preLoaderRoute: typeof AuthenticatedEditEventIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/event/$id': {
+      id: '/_authenticated/event/$id'
+      path: '/event/$id'
+      fullPath: '/event/$id'
+      preLoaderRoute: typeof AuthenticatedEventIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/manage-event/$id': {
+      id: '/_authenticated/manage-event/$id'
+      path: '/manage-event/$id'
+      fullPath: '/manage-event/$id'
+      preLoaderRoute: typeof AuthenticatedManageEventIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/join/$id/': {
@@ -351,32 +398,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JoinIdRoomIdRouteImport
       parentRoute: typeof JoinIdRoute
     }
-    '/_authenticated/manage-event/$id': {
-      id: '/_authenticated/manage-event/$id'
-      path: '/manage-event/$id'
-      fullPath: '/manage-event/$id'
-      preLoaderRoute: typeof AuthenticatedManageEventIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/event/$id': {
-      id: '/_authenticated/event/$id'
-      path: '/event/$id'
-      fullPath: '/event/$id'
-      preLoaderRoute: typeof AuthenticatedEventIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/edit-event/$id': {
-      id: '/_authenticated/edit-event/$id'
-      path: '/edit-event/$id'
-      fullPath: '/edit-event/$id'
-      preLoaderRoute: typeof AuthenticatedEditEventIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/dashboard/$id': {
-      id: '/_authenticated/dashboard/$id'
-      path: '/dashboard/$id'
-      fullPath: '/dashboard/$id'
-      preLoaderRoute: typeof AuthenticatedDashboardIdRouteImport
+    '/_authenticated/dashboard_/$id/members': {
+      id: '/_authenticated/dashboard_/$id/members'
+      path: '/dashboard/$id/members'
+      fullPath: '/dashboard/$id/members'
+      preLoaderRoute: typeof AuthenticatedDashboardIdMembersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/join/$id/confirm/$token': {
@@ -385,13 +411,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/join/$id/confirm/$token'
       preLoaderRoute: typeof JoinIdConfirmTokenRouteImport
       parentRoute: typeof JoinIdRoute
-    }
-    '/_authenticated/dashboard_/$id/members': {
-      id: '/_authenticated/dashboard_/$id/members'
-      path: '/dashboard/$id/members'
-      fullPath: '/dashboard/$id/members'
-      preLoaderRoute: typeof AuthenticatedDashboardIdMembersRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard_/$id/allowlist/tsx': {
       id: '/_authenticated/dashboard_/$id/allowlist/tsx'
@@ -406,6 +425,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCreateEventRoute: typeof AuthenticatedCreateEventRoute
   AuthenticatedMyEventsRoute: typeof AuthenticatedMyEventsRoute
+  AuthenticatedCheckInIdRoute: typeof AuthenticatedCheckInIdRoute
   AuthenticatedDashboardIdRoute: typeof AuthenticatedDashboardIdRoute
   AuthenticatedEditEventIdRoute: typeof AuthenticatedEditEventIdRoute
   AuthenticatedEventIdRoute: typeof AuthenticatedEventIdRoute
@@ -417,6 +437,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCreateEventRoute: AuthenticatedCreateEventRoute,
   AuthenticatedMyEventsRoute: AuthenticatedMyEventsRoute,
+  AuthenticatedCheckInIdRoute: AuthenticatedCheckInIdRoute,
   AuthenticatedDashboardIdRoute: AuthenticatedDashboardIdRoute,
   AuthenticatedEditEventIdRoute: AuthenticatedEditEventIdRoute,
   AuthenticatedEventIdRoute: AuthenticatedEventIdRoute,

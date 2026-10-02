@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { createDemoEventData, deleteDemoEventData } from "@/lib/demo-data.functions";
 import { getEventRole, type EventRole } from "@/lib/event-role";
+import { clearAuthSessionStartedAt } from "@/lib/auth-session";
 
 type EventRow = {
   id: string;
@@ -134,9 +135,15 @@ function MyEvents() {
   };
 
   const onLogout = async () => {
+    clearAuthSessionStartedAt();
+
     await supabase.auth.signOut();
+
     toast.success("Đã đăng xuất");
-    navigate({ to: "/" });
+
+    navigate({
+      to: "/",
+    });
   };
 
   const ownedEvents = events.filter((event) => event.access_role === "owner");
@@ -149,10 +156,11 @@ function MyEvents() {
     <div className="min-h-screen bg-secondary/30">
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/my-events" className="flex items-center gap-2">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
               <Sparkles className="h-4 w-4" strokeWidth={2.5} />
             </span>
+
             <span className="font-display text-xl font-bold">Joinly</span>
           </Link>
           <div className="flex items-center gap-3">

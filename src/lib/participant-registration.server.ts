@@ -1,6 +1,4 @@
-// Server-only helper that mirrors the join-form registration flow.
-// Both the public register endpoint and the demo seeder go through this
-// function so demo data is subject to the same room/access-code checks.
+
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
@@ -21,10 +19,13 @@ export type RegisterResult =
   | { status: "duplicate" }
   | { status: "not_allowed" };
 
-export async function registerParticipantCore(input: RegisterInput): Promise<RegisterResult> {
+export async function registerParticipantCore(
+  input: RegisterInput,
+): Promise<RegisterResult> {
   // Chuẩn hóa dữ liệu
   const normalizedEmail = input.email.trim().toLowerCase();
-  const normalizedStudentId = input.studentId?.trim().toUpperCase() || null;
+  const normalizedStudentId =
+    input.studentId?.trim().toUpperCase() || null;
 
   const normalizedFullName = input.fullName.trim();
   const normalizedPhone = input.phone?.trim() || null;
@@ -52,7 +53,9 @@ export async function registerParticipantCore(input: RegisterInput): Promise<Reg
   const requiredCode = room.access_code;
 
   if (requiredCode) {
-    const provided = input.accessCode ? input.accessCode.trim().toUpperCase() : null;
+    const provided = input.accessCode
+      ? input.accessCode.trim().toUpperCase()
+      : null;
 
     if (!provided || provided !== requiredCode) {
       return { status: "wrong_code" };
@@ -63,11 +66,12 @@ export async function registerParticipantCore(input: RegisterInput): Promise<Reg
   // 3. Kiểm tra Allow-list
   // =========================
 
-  const { data: eventRow, error: eventErr } = await supabaseAdmin
-    .from("events")
-    .select("allowlist_enabled, allowlist_scope")
-    .eq("id", input.eventId)
-    .maybeSingle();
+  const { data: eventRow, error: eventErr } =
+    await supabaseAdmin
+      .from("events")
+      .select("allowlist_enabled, allowlist_scope")
+      .eq("id", input.eventId)
+      .maybeSingle();
 
   if (eventErr) throw eventErr;
 
@@ -79,54 +83,92 @@ export async function registerParticipantCore(input: RegisterInput): Promise<Reg
     type AllowlistCandidate = {
       email: string | null;
       student_id: string | null;
+      room_id: string | null;
     };
 
     const findCandidates = async (
       column: "email" | "student_id",
       value: string,
     ): Promise<AllowlistCandidate[]> => {
-      let query = supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from("event_allowlist")
-        .select("email, student_id")
+        .select("email, student_id, room_id")
         .eq("event_id", input.eventId)
         .eq(column, value);
-
-      if (eventRow.allowlist_scope === "room") {
-        query = query.eq("room_id", input.roomId);
-      } else {
-        query = query.is("room_id", null);
-      }
-
-      const { data, error } = await query;
 
       if (error) throw error;
 
       return data ?? [];
     };
 
-    const emailCandidates = await findCandidates("email", normalizedEmail);
+    const emailCandidates = await findCandidates(
+      "email",
+      normalizedEmail,
+    );
 
     const studentCandidates = normalizedStudentId
-      ? await findCandidates("student_id", normalizedStudentId)
+      ? await findCandidates(
+          "student_id",
+          normalizedStudentId,
+        )
       : [];
 
-    const candidates = [...emailCandidates, ...studentCandidates];
+    const candidates = [
+      ...emailCandidates,
+      ...studentCandidates,
+    ];
 
-    const isAllowed = candidates.some((entry) => {
-      if (entry.email && entry.student_id) {
-        return entry.email === normalizedEmail && entry.student_id === normalizedStudentId;
-      }
+    const candidatesInScope = candidates.filter(
+      (entry) => {
+        // Nếu chọn Allow-list toàn sự kiện:
+        // người ở bất kỳ phòng nào cũng được tính.
+        if (
+          eventRow.allowlist_scope ===
+          "event"
+        ) {
+          return true;
+        }
 
-      if (entry.email) {
-        return entry.email === normalizedEmail;
-      }
+        // Nếu chọn Allow-list theo phòng:
+        // nhận người chung toàn sự kiện
+        // + người thuộc đúng phòng hiện tại.
+        return (
+          entry.room_id === null ||
+          entry.room_id === input.roomId
+        );
+      },
+    );
 
-      if (entry.student_id) {
-        return entry.student_id === normalizedStudentId;
-      }
+    const isAllowed =
+      candidatesInScope.some((entry) => {
+        if (
+          entry.email &&
+          entry.student_id
+        ) {
+          return (
+            entry.email ===
+              normalizedEmail &&
+            entry.student_id ===
+              normalizedStudentId
+          );
+        }
 
-      return false;
-    });
+        if (entry.email) {
+          return (
+            entry.email ===
+            normalizedEmail
+          );
+        }
+
+        if (entry.student_id) {
+          return (
+            entry.student_id ===
+            normalizedStudentId
+          );
+        }
+
+        return false;
+      });
 
     if (!isAllowed) {
       return {
@@ -139,8 +181,12 @@ export async function registerParticipantCore(input: RegisterInput): Promise<Reg
   // 4. Kiểm tra đăng ký trùng
   // =========================
 
-  // Kiểm tra Email đã đăng ký trong phòng này chưa
-  const { data: existingEmail, error: emailExistErr } = await supabaseAdmin
+  // Kiểm tra Email đã đăng ký
+  // trong phòng này chưa
+  const {
+    data: existingEmail,
+    error: emailExistErr,
+  } = await supabaseAdmin
     .from("participants")
     .select("id")
     .eq("event_id", input.eventId)
@@ -148,26 +194,37 @@ export async function registerParticipantCore(input: RegisterInput): Promise<Reg
     .ilike("email", normalizedEmail)
     .maybeSingle();
 
-  if (emailExistErr) throw emailExistErr;
+  if (emailExistErr)
+    throw emailExistErr;
 
   if (existingEmail) {
     return { status: "duplicate" };
   }
 
-  // Nếu có MSSV thì kiểm tra MSSV đã được dùng trong phòng này chưa
+  // Nếu có MSSV thì kiểm tra MSSV
+  // đã được dùng trong phòng này chưa
   if (normalizedStudentId) {
-    const { data: existingStudent, error: studentExistErr } = await supabaseAdmin
+    const {
+      data: existingStudent,
+      error: studentExistErr,
+    } = await supabaseAdmin
       .from("participants")
       .select("id")
       .eq("event_id", input.eventId)
       .eq("room_id", input.roomId)
-      .ilike("student_id", normalizedStudentId)
+      .ilike(
+        "student_id",
+        normalizedStudentId,
+      )
       .maybeSingle();
 
-    if (studentExistErr) throw studentExistErr;
+    if (studentExistErr)
+      throw studentExistErr;
 
     if (existingStudent) {
-      return { status: "duplicate" };
+      return {
+        status: "duplicate",
+      };
     }
   }
 
@@ -175,22 +232,26 @@ export async function registerParticipantCore(input: RegisterInput): Promise<Reg
   // 5. Tạo participant
   // =========================
 
-  const { data: inserted, error } = await supabaseAdmin
-    .from("participants")
-    .insert({
-      event_id: input.eventId,
-      room_id: input.roomId,
-      full_name: normalizedFullName,
-      email: normalizedEmail,
-      phone: normalizedPhone,
-      student_id: normalizedStudentId,
-    })
-    .select("confirmation_token")
-    .single();
+  const { data: inserted, error } =
+    await supabaseAdmin
+      .from("participants")
+      .insert({
+        event_id: input.eventId,
+        room_id: input.roomId,
+        full_name: normalizedFullName,
+        email: normalizedEmail,
+        phone: normalizedPhone,
+        student_id:
+          normalizedStudentId,
+      })
+      .select("confirmation_token")
+      .single();
 
   if (error) {
     if (error.code === "23505") {
-      return { status: "duplicate" };
+      return {
+        status: "duplicate",
+      };
     }
 
     throw error;
@@ -198,6 +259,7 @@ export async function registerParticipantCore(input: RegisterInput): Promise<Reg
 
   return {
     status: "ok",
-    token: inserted.confirmation_token,
+    token:
+      inserted.confirmation_token,
   };
 }

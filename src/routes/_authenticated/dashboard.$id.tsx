@@ -44,6 +44,18 @@ type Participant = {
   student_id: string | null;
   room_id: string;
   created_at: string;
+
+  checked_in: boolean;
+  checked_in_at: string | null;
+  checked_out_at: string | null;
+  checked_in_by: string | null;
+  checked_out_by: string | null;
+};
+
+type CheckinOperator = {
+  user_id: string;
+  full_name: string;
+  role: string;
 };
 
 function Dashboard() {
@@ -61,13 +73,15 @@ function Dashboard() {
 
   const [role, setRole] = useState<EventRole>(null);
 
-  const [showEmail, setShowEmail] = useState(true);
+  const [showEmail, setShowEmail] = useState(false);
 
-  const [showPhone, setShowPhone] = useState(true);
+  const [showPhone, setShowPhone] = useState(false);
 
-  const [showStudentId, setShowStudentId] = useState(true);
+  const [showStudentId, setShowStudentId] = useState(false);
 
   const [selectedParticipantRoomId, setSelectedParticipantRoomId] = useState<string>("all");
+
+  const [operators, setOperators] = useState<CheckinOperator[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,15 +100,21 @@ function Dashboard() {
         .from("participants")
         .select(
           `
-            id,
-            full_name,
-            email,
-            phone,
-            student_id,
-            room_id,
-            created_at
-          `,
+  id,
+  full_name,
+  email,
+  phone,
+  student_id,
+  room_id,
+  created_at,
+  checked_in,
+  checked_in_at,
+  checked_out_at,
+  checked_in_by,
+  checked_out_by
+`,
         )
+
         .eq("event_id", id)
         .order("created_at", {
           ascending: false,
@@ -126,13 +146,95 @@ function Dashboard() {
     setLoading(false);
   }, [id]);
 
+  const reloadParticipants = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("participants")
+      .select(
+        `
+      id,
+      full_name,
+      email,
+      phone,
+      student_id,
+      room_id,
+      created_at,
+      checked_in,
+      checked_in_at,
+      checked_out_at,
+      checked_in_by,
+      checked_out_by
+    `,
+      )
+      .eq("event_id", id)
+      .order("created_at", {
+        ascending: false,
+      });
+
+    if (error) {
+      console.error("Reload participants error:", error);
+      return;
+    }
+
+    setParticipants((data as Participant[]) ?? []);
+  }, [id]);
+
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel(`participants-dashboard-${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "participants",
+          filter: `event_id=eq.${id}`,
+        },
+        () => {
+          void reloadParticipants();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [id, reloadParticipants]);
+
   const roomName = (roomId: string) => rooms.find((room) => room.id === roomId)?.name ?? "—";
+  const operatorName = (userId: string | null) => {
+    if (!userId) return "—";
+
+    return operators.find((operator) => operator.user_id === userId)?.full_name ?? "Không xác định";
+  };
+  const formatDateTime = (value: string | null) => {
+    if (!value) return "";
+
+    return new Date(value).toLocaleString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
 
   const total = participants.length;
+  const checkedInCount = participants.filter(
+    (participant) =>
+      (participant.checked_in_at || participant.checked_in) && !participant.checked_out_at,
+  ).length;
+
+  const checkedOutCount = participants.filter((participant) =>
+    Boolean(participant.checked_out_at),
+  ).length;
+
+  const notArrivedCount = participants.filter(
+    (participant) => !participant.checked_in_at && !participant.checked_in,
+  ).length;
 
   const breakdown = rooms.map((room) => ({
     room,
@@ -146,17 +248,44 @@ function Dashboard() {
       : participants.filter((participant) => participant.room_id === selectedParticipantRoomId);
 
   const exportCsv = () => {
-    const header = ["Họ tên", "Email", "Số điện thoại", "MSSV", "Phòng", "Thời gian đăng ký"];
+    const header = [
+      "Họ tên",
+      "Email",
+      "Số điện thoại",
+      "MSSV",
+      "Phòng",
+      "Trạng thái",
+      "Check-in lúc",
+      "Check-out lúc",
+      "Thời gian đăng ký",
+    ];
 
-    const rows = participants.map((participant) => [
-      participant.full_name,
-      participant.email,
-      participant.phone ?? "",
-      participant.student_id ?? "",
-      roomName(participant.room_id),
+    const rows = participants.map((participant) => {
+      const status = participant.checked_out_at
+        ? "Đã check-out"
+        : participant.checked_in_at || participant.checked_in
+          ? "Đã check-in"
+          : "Chưa đến";
 
-      new Date(participant.created_at).toLocaleString("vi-VN"),
-    ]);
+      return [
+        participant.full_name,
+        participant.email,
+        participant.phone ?? "",
+        participant.student_id ?? "",
+        roomName(participant.room_id),
+        status,
+
+        participant.checked_in_at
+          ? new Date(participant.checked_in_at).toLocaleString("vi-VN")
+          : "",
+
+        participant.checked_out_at
+          ? new Date(participant.checked_out_at).toLocaleString("vi-VN")
+          : "",
+
+        new Date(participant.created_at).toLocaleString("vi-VN"),
+      ];
+    });
 
     const safeCsvCell = (value: string) => {
       const stripped = value ?? "";
@@ -263,17 +392,30 @@ function Dashboard() {
         </div>
 
         {/* STAT CARDS */}
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        {/* STAT CARDS */}
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             icon={<Users className="h-5 w-5" />}
-            label="Tổng số người đã tham gia"
+            label="Tổng đăng ký"
             value={String(total)}
           />
 
           <StatCard
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            label="Đã check-in"
+            value={String(checkedInCount)}
+          />
+
+          <StatCard
+            icon={<Users className="h-5 w-5" />}
+            label="Chưa đến"
+            value={String(notArrivedCount)}
+          />
+
+          <StatCard
             icon={<DoorOpen className="h-5 w-5" />}
-            label="Số phòng"
-            value={String(rooms.length)}
+            label="Đã check-out"
+            value={String(checkedOutCount)}
           />
         </div>
 
@@ -360,7 +502,7 @@ function Dashboard() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1000px] text-sm">
+              <table className="w-full min-w-1000px text-sm">
                 <thead className="bg-secondary/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-5 py-3 font-medium">Họ tên</th>
@@ -448,10 +590,42 @@ function Dashboard() {
                       <td className="px-5 py-3">{roomName(participant.room_id)}</td>
 
                       <td className="px-5 py-3">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Đã tham gia
-                        </span>
+                        {participant.checked_out_at ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                              Đã check-out
+                            </span>
+
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {formatDateTime(participant.checked_out_at)}
+                            </div>
+
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Bởi: {operatorName(participant.checked_out_by)}
+                            </div>
+                          </div>
+                        ) : participant.checked_in_at || participant.checked_in ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Đã check-in
+                            </span>
+
+                            {participant.checked_in_at && (
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {formatDateTime(participant.checked_in_at)}
+                              </div>
+                            )}
+
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Bởi: {operatorName(participant.checked_in_by)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                            Chưa đến
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

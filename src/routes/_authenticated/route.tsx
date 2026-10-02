@@ -1,14 +1,88 @@
+import { useEffect } from "react";
+
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+
 import { supabase } from "@/integrations/supabase/client";
+
+import {
+  clearAuthSessionStartedAt,
+  ensureAuthSessionStartedAt,
+  getAuthSessionRemainingMs,
+  isAuthSessionExpired,
+} from "@/lib/auth-session";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
+
   beforeLoad: async () => {
     const { data, error } = await supabase.auth.getUser();
+
     if (error || !data.user) {
-      throw redirect({ to: "/login" });
+      clearAuthSessionStartedAt();
+
+      throw redirect({
+        to: "/login",
+        search: {},
+      });
     }
-    return { user: data.user };
+
+    const startedAt = ensureAuthSessionStartedAt();
+
+    if (isAuthSessionExpired(startedAt)) {
+      clearAuthSessionStartedAt();
+
+      await supabase.auth.signOut({
+        scope: "local",
+      });
+
+      throw redirect({
+        to: "/login",
+        search: {},
+      });
+    }
+
+    return {
+      user: data.user,
+    };
   },
-  component: () => <Outlet />,
+
+  component: AuthenticatedLayout,
 });
+
+function AuthenticatedLayout() {
+  useEffect(() => {
+    const startedAt = ensureAuthSessionStartedAt();
+
+    const remainingMs = getAuthSessionRemainingMs(startedAt);
+
+    if (remainingMs <= 0) {
+      clearAuthSessionStartedAt();
+
+      void supabase.auth
+        .signOut({
+          scope: "local",
+        })
+        .finally(() => {
+          window.location.replace("/login");
+        });
+
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      clearAuthSessionStartedAt();
+
+      void supabase.auth
+        .signOut({
+          scope: "local",
+        })
+        .finally(() => {
+          window.location.replace("/login");
+        });
+    }, remainingMs);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return <Outlet />;
+}

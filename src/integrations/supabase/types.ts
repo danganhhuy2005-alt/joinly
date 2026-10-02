@@ -196,6 +196,10 @@ export type Database = {
       participants: {
         Row: {
           checked_in: boolean;
+          checked_in_at: string | null;
+          checked_out_at: string | null;
+          checked_in_by: string | null;
+          checked_out_by: string | null;
           confirmation_token: string;
           created_at: string;
           email: string;
@@ -208,6 +212,10 @@ export type Database = {
         };
         Insert: {
           checked_in?: boolean;
+          checked_in_at?: string | null;
+          checked_out_at?: string | null;
+          checked_in_by?: string | null;
+          checked_out_by?: string | null;
           confirmation_token?: string;
           created_at?: string;
           email: string;
@@ -220,6 +228,10 @@ export type Database = {
         };
         Update: {
           checked_in?: boolean;
+          checked_in_at?: string | null;
+          checked_out_at?: string | null;
+          checked_in_by?: string | null;
+          checked_out_by?: string | null;
           confirmation_token?: string;
           created_at?: string;
           email?: string;

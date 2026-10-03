@@ -9,9 +9,20 @@ import {
   DoorOpen,
   Eye,
   EyeOff,
+  Filter,
+  Search,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { getEventRole, type EventRole } from "@/lib/event-role";
 
@@ -81,6 +92,12 @@ function Dashboard() {
 
   const [selectedParticipantRoomId, setSelectedParticipantRoomId] = useState<string>("all");
 
+  const [selectedStatus, setSelectedStatus] = useState<
+    "all" | "not_arrived" | "checked_in" | "checked_out"
+  >("all");
+
+  const [searchTerm, setSearchTerm] = useState("");
+
   const [operators, setOperators] = useState<CheckinOperator[]>([]);
 
   const load = useCallback(async () => {
@@ -90,6 +107,7 @@ function Dashboard() {
       { data: ev, error: eventError },
       { data: rms, error: roomsError },
       { data: ps, error: participantsError },
+      { data: operatorData, error: operatorError },
       currentRole,
     ] = await Promise.all([
       supabase.from("events").select("id, name").eq("id", id).maybeSingle(),
@@ -119,6 +137,9 @@ function Dashboard() {
         .order("created_at", {
           ascending: false,
         }),
+      supabase.rpc("list_event_checkin_operators", {
+        _event_id: id,
+      }),
 
       getEventRole(id),
     ]);
@@ -142,6 +163,12 @@ function Dashboard() {
     setRooms((rms as Room[] | null) ?? []);
 
     setParticipants((ps as Participant[] | null) ?? []);
+
+    setOperators((operatorData as CheckinOperator[] | null) ?? []);
+
+    if (operatorError) {
+      console.error("Load operators error:", operatorError);
+    }
 
     setLoading(false);
   }, [id]);
@@ -242,13 +269,51 @@ function Dashboard() {
     count: participants.filter((participant) => participant.room_id === room.id).length,
   }));
 
-  const filteredParticipants =
-    selectedParticipantRoomId === "all"
-      ? participants
-      : participants.filter((participant) => participant.room_id === selectedParticipantRoomId);
+  const filteredParticipants = participants.filter((participant) => {
+    const matchesRoom =
+      selectedParticipantRoomId === "all" || participant.room_id === selectedParticipantRoomId;
 
-  const exportCsv = () => {
-    const header = [
+    const isCheckedOut = Boolean(participant.checked_out_at);
+
+    const isCheckedIn =
+      Boolean(participant.checked_in_at || participant.checked_in) && !participant.checked_out_at;
+
+    const isNotArrived = !participant.checked_in_at && !participant.checked_in;
+
+    const matchesStatus =
+      selectedStatus === "all" ||
+      (selectedStatus === "not_arrived" && isNotArrived) ||
+      (selectedStatus === "checked_in" && isCheckedIn) ||
+      (selectedStatus === "checked_out" && isCheckedOut);
+
+    const keyword = searchTerm.trim().toLowerCase();
+
+    const matchesSearch =
+      keyword === "" ||
+      participant.full_name?.toLowerCase().includes(keyword) ||
+      participant.email?.toLowerCase().includes(keyword) ||
+      participant.phone?.toLowerCase().includes(keyword) ||
+      participant.student_id?.toLowerCase().includes(keyword);
+
+    return matchesRoom && matchesStatus && matchesSearch;
+  });
+  const csvEscape = (value: string | null | undefined) => {
+    const text = String(value ?? "").replace(/"/g, '""');
+    return `"${text}"`;
+  };
+
+  const csvTextNumber = (value: string | null | undefined) => {
+    if (!value) return '""';
+
+    // Chỉ cho phép số để tránh CSV/Excel formula injection
+    const text = String(value).replace(/[^\d]/g, "");
+
+    // Giữ số 0 đầu khi mở bằng Excel
+    return `"=""${text}"""`;
+  };
+
+  const exportCSV = () => {
+    const headers = [
       "Họ tên",
       "Email",
       "Số điện thoại",
@@ -256,7 +321,9 @@ function Dashboard() {
       "Phòng",
       "Trạng thái",
       "Check-in lúc",
+      "Check-in bởi",
       "Check-out lúc",
+      "Check-out bởi",
       "Thời gian đăng ký",
     ];
 
@@ -268,53 +335,51 @@ function Dashboard() {
           : "Chưa đến";
 
       return [
-        participant.full_name,
-        participant.email,
-        participant.phone ?? "",
-        participant.student_id ?? "",
-        roomName(participant.room_id),
-        status,
+        csvEscape(participant.full_name),
+        csvEscape(participant.email),
+        csvTextNumber(participant.phone),
+        csvTextNumber(participant.student_id),
+        csvEscape(roomName(participant.room_id)),
+        csvEscape(status),
 
-        participant.checked_in_at
-          ? new Date(participant.checked_in_at).toLocaleString("vi-VN")
-          : "",
+        csvEscape(
+          participant.checked_in_at
+            ? new Date(participant.checked_in_at).toLocaleString("vi-VN")
+            : "",
+        ),
 
-        participant.checked_out_at
-          ? new Date(participant.checked_out_at).toLocaleString("vi-VN")
-          : "",
+        csvEscape(participant.checked_in_by ? operatorName(participant.checked_in_by) : ""),
 
-        new Date(participant.created_at).toLocaleString("vi-VN"),
-      ];
+        csvEscape(
+          participant.checked_out_at
+            ? new Date(participant.checked_out_at).toLocaleString("vi-VN")
+            : "",
+        ),
+
+        csvEscape(participant.checked_out_by ? operatorName(participant.checked_out_by) : ""),
+
+        csvEscape(new Date(participant.created_at).toLocaleString("vi-VN")),
+      ].join(",");
     });
 
-    const safeCsvCell = (value: string) => {
-      const stripped = value ?? "";
+    const csvContent = "\uFEFF" + [headers.map(csvEscape).join(","), ...rows].join("\n");
 
-      const safe = /^[=+\-@\t\r|%]/.test(stripped) ? `'${stripped}` : stripped;
-
-      return `"${safe.replace(/"/g, '""')}"`;
-    };
-
-    const csv =
-      "\uFEFF" + [header, ...rows].map((row) => row.map(safeCsvCell).join(",")).join("\n");
-
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8",
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
     });
 
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
-
     link.href = url;
+    link.download = `joinly-${event?.name ?? "participants"}.csv`;
 
-    link.download = `participants-${event?.name ?? id}.csv`;
-
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
   };
-
   const roleLabel =
     role === "owner"
       ? "Owner"
@@ -356,6 +421,9 @@ function Dashboard() {
     );
   }
 
+  const activeFilterCount =
+    (selectedParticipantRoomId !== "all" ? 1 : 0) + (selectedStatus !== "all" ? 1 : 0);
+
   return (
     <div className="min-h-screen bg-secondary/30 px-4 py-12">
       <div className="mx-auto max-w-6xl">
@@ -385,9 +453,9 @@ function Dashboard() {
             <p className="mt-1 text-sm text-muted-foreground">{event.name}</p>
           </div>
 
-          <Button variant="outline" onClick={exportCsv} disabled={total === 0}>
-            <Download className="h-4 w-4" />
-            Export CSV
+          <Button variant="outline" onClick={exportCSV} disabled={total === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Xuất CSV
           </Button>
         </div>
 
@@ -427,30 +495,6 @@ function Dashboard() {
             <span className="text-sm text-muted-foreground">{total} người</span>
           </div>
 
-          {/* BỘ LỌC */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={selectedParticipantRoomId === "all" ? "default" : "outline"}
-              onClick={() => setSelectedParticipantRoomId("all")}
-            >
-              Tất cả ({total})
-            </Button>
-
-            {breakdown.map(({ room, count }) => (
-              <Button
-                key={room.id}
-                type="button"
-                size="sm"
-                variant={selectedParticipantRoomId === room.id ? "default" : "outline"}
-                onClick={() => setSelectedParticipantRoomId(room.id)}
-              >
-                {room.name} ({count})
-              </Button>
-            ))}
-          </div>
-
           {/* THANH THỐNG KÊ */}
           {breakdown.length === 0 ? (
             <p className="mt-4 text-sm text-muted-foreground">Sự kiện chưa có phòng.</p>
@@ -484,6 +528,7 @@ function Dashboard() {
 
         {/* DANH SÁCH NGƯỜI THAM GIA */}
         <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-card">
+          {/* HEADER */}
           <div className="border-b border-border px-6 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -493,12 +538,144 @@ function Dashboard() {
                   Thông tin đăng ký của người tham gia sự kiện.
                 </p>
               </div>
+
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Tìm tên, email, SĐT, MSSV..."
+                    className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring sm:w-[280px]"
+                  />
+                </div>
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant={activeFilterCount > 0 ? "default" : "outline"}>
+                      <Filter className="mr-2 h-4 w-4" />
+                      Bộ lọc
+                      {activeFilterCount > 0 && ` (${activeFilterCount})`}
+                    </Button>
+                  </PopoverTrigger>
+
+                  <PopoverContent align="end" className="w-80">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-medium">Bộ lọc</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Lọc danh sách người tham gia.
+                        </p>
+                      </div>
+
+                      {/* PHÒNG */}
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Phòng</p>
+
+                        <Select
+                          value={selectedParticipantRoomId}
+                          onValueChange={setSelectedParticipantRoomId}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Chọn phòng" />
+                          </SelectTrigger>
+
+                          <SelectContent>
+                            <SelectItem value="all">Tất cả phòng</SelectItem>
+
+                            {rooms.map((room) => (
+                              <SelectItem key={room.id} value={room.id}>
+                                {room.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* TRẠNG THÁI */}
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Trạng thái</p>
+
+                        <Select
+                          value={selectedStatus}
+                          onValueChange={(value) =>
+                            setSelectedStatus(
+                              value as "all" | "not_arrived" | "checked_in" | "checked_out",
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Chọn trạng thái" />
+                          </SelectTrigger>
+
+                          <SelectContent>
+                            <SelectItem value="all">Tất cả trạng thái</SelectItem>
+
+                            <SelectItem value="not_arrived">Chưa đến</SelectItem>
+
+                            <SelectItem value="checked_in">Đã check-in</SelectItem>
+
+                            <SelectItem value="checked_out">Đã check-out</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          setSelectedParticipantRoomId("all");
+                          setSelectedStatus("all");
+                        }}
+                      >
+                        Đặt lại bộ lọc
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
           </div>
 
+          {/* SỐ NGƯỜI ĐANG HIỂN THỊ */}
+          <div className="border-b border-border px-6 py-3 text-sm text-muted-foreground">
+            Đang hiển thị{" "}
+            <span className="font-medium text-foreground">{filteredParticipants.length}</span> /{" "}
+            {total} người
+          </div>
+
           {filteredParticipants.length === 0 ? (
-            <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-              Chưa có người đăng ký trong phạm vi đang chọn.
+            <div className="px-6 py-12 text-center">
+              <Users className="mx-auto h-10 w-10 text-muted-foreground/50" />
+
+              <p className="mt-3 font-medium">
+                {total === 0 ? "Chưa có người tham gia" : "Không tìm thấy người phù hợp"}
+              </p>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {total === 0
+                  ? "Khi có người đăng ký, danh sách sẽ hiển thị tại đây."
+                  : "Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc."}
+              </p>
+
+              {total > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setSelectedParticipantRoomId("all");
+                    setSelectedStatus("all");
+                  }}
+                >
+                  Xóa tìm kiếm và bộ lọc
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

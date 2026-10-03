@@ -44,7 +44,6 @@ function CreateEvent() {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [checkinRadius, setCheckinRadius] = useState("200");
-  const [gettingLocation, setGettingLocation] = useState(false);
   const [startsAt, setStartsAt] = useState("");
   const currentYear = new Date().getFullYear();
   const minStartsAt = (() => {
@@ -64,33 +63,6 @@ function CreateEvent() {
   const addRoom = () => setRooms((r) => [...r, { name: "", accessCode: "" }]);
   const removeRoom = (i: number) => setRooms((r) => r.filter((_, idx) => idx !== i));
 
-  const getEventLocation = () => {
-    if (!navigator.geolocation) {
-      alert("Trình duyệt không hỗ trợ lấy vị trí");
-      return;
-    }
-
-    setGettingLocation(true);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLatitude(position.coords.latitude);
-        setLongitude(position.coords.longitude);
-        setGettingLocation(false);
-
-        alert("Đã lấy vị trí sự kiện thành công");
-      },
-      () => {
-        setGettingLocation(false);
-        alert("Không thể lấy vị trí. Hãy cho phép quyền vị trí.");
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      },
-    );
-  };
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (latitude === null || longitude === null) {
@@ -198,18 +170,6 @@ function CreateEvent() {
 
           <form onSubmit={onSubmit} className="mt-6 space-y-5">
             <div className="space-y-1.5">
-              <Label htmlFor="name">Tên sự kiện *</Label>
-              <Input
-                id="name"
-                required
-                maxLength={120}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Workshop UI/UX cơ bản"
-              />
-            </div>
-
-            <div className="space-y-1.5">
               <Label htmlFor="desc">Mô tả</Label>
               <Textarea
                 id="desc"
@@ -246,24 +206,26 @@ function CreateEvent() {
               </div>
               <div className="space-y-3 rounded-lg border p-4">
                 <div>
-                  <Label>Xác minh vị trí khi check-in</Label>
+                  <Label>Địa điểm tổ chức</Label>
+
                   <p className="text-xs text-muted-foreground">
-                    Người tham gia phải ở trong bán kính cho phép của sự kiện.
+                    Tìm địa điểm bằng Google và chọn đúng vị trí tổ chức sự kiện.
                   </p>
                 </div>
 
                 <EventLocationPicker
                   latitude={latitude}
                   longitude={longitude}
-                  onChange={(lat, lng) => {
+                  address={location}
+                  onChange={(lat, lng, newAddress) => {
                     setLatitude(lat);
                     setLongitude(lng);
+
+                    if (newAddress) {
+                      setLocation(newAddress);
+                    }
                   }}
                 />
-
-                {latitude !== null && longitude !== null && (
-                  <p className="text-xs text-green-600">✓ Đã lấy vị trí sự kiện</p>
-                )}
 
                 <div className="space-y-1.5">
                   <Label htmlFor="checkin-radius">Bán kính cho phép check-in</Label>

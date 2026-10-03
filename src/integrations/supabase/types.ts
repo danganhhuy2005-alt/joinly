@@ -332,6 +332,16 @@ export type Database = {
       };
     };
     Functions: {
+      list_event_checkin_operators: {
+        Args: {
+          _event_id: string;
+        };
+        Returns: {
+          user_id: string;
+          full_name: string;
+          role: string;
+        }[];
+      };
       update_event_allowlist_settings: {
         Args: {
           _event_id: string;

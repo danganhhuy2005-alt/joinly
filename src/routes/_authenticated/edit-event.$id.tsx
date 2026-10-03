@@ -293,33 +293,27 @@ function EditEvent() {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="location">Địa điểm</Label>
-
-              <Input
-                id="location"
-                value={location}
-                maxLength={200}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="VD: Phòng A101..."
-              />
-            </div>
-
             <div className="space-y-3 rounded-lg border p-4">
               <div>
-                <Label>Vị trí sự kiện</Label>
+                <Label>Địa điểm tổ chức</Label>
 
                 <p className="text-xs text-muted-foreground">
-                  Chọn lại trên bản đồ nếu địa điểm tổ chức thay đổi.
+                  Tìm địa điểm bằng Google. Bạn cũng có thể kéo ghim hoặc bấm trên bản đồ để chỉnh
+                  lại vị trí.
                 </p>
               </div>
 
               <EventLocationPicker
                 latitude={latitude}
                 longitude={longitude}
-                onChange={(lat, lng) => {
+                address={location}
+                onChange={(lat, lng, newAddress) => {
                   setLatitude(lat);
                   setLongitude(lng);
+
+                  if (newAddress) {
+                    setLocation(newAddress);
+                  }
                 }}
               />
 

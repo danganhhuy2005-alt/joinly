@@ -31,7 +31,7 @@ const schema = z.object({
   description: z.string().trim().max(2000).optional(),
   location: z.string().trim().max(200).optional(),
   startsAt: z.string().min(1, "Vui lòng chọn thời gian bắt đầu"),
-  expected: z.number().int().min(1, "Số người dự kiến phải ít nhất 1").max(100000).optional(),
+  expected: z.number().int().min(1, "Số người dự kiến phải ít nhất 1").max(100000),
   rooms: z.array(roomSchema).min(1, "Cần ít nhất một phòng"),
 });
 
@@ -76,12 +76,16 @@ function CreateEvent() {
       alert("Bán kính check-in phải từ 20m đến 5000m");
       return;
     }
+    if (!expected.trim()) {
+      toast.error("Vui lòng nhập số người dự kiến.");
+      return;
+    }
     const parsed = schema.safeParse({
       name,
       description: description || undefined,
       location: location || undefined,
       startsAt,
-      expected: expected ? Number(expected) : undefined,
+      expected: Number(expected),
       rooms: rooms
         .map((r) => ({ name: r.name.trim(), accessCode: r.accessCode.trim() || undefined }))
         .filter((r) => r.name.length > 0),
@@ -108,7 +112,7 @@ function CreateEvent() {
     } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Phiên đăng nhập đã hết hạn");
-      navigate({ to: "/login" });
+      navigate({ to: "/" });
       return;
     }
     const { data: ev, error } = await supabase
@@ -123,7 +127,7 @@ function CreateEvent() {
         longitude: longitude,
         checkin_radius: Number(checkinRadius),
         starts_at: new Date(parsed.data.startsAt).toISOString(),
-        expected_attendees: parsed.data.expected ?? null,
+        expected_attendees: parsed.data.expected,
       })
       .select("id")
       .single();
@@ -170,6 +174,18 @@ function CreateEvent() {
 
           <form onSubmit={onSubmit} className="mt-6 space-y-5">
             <div className="space-y-1.5">
+              <Label htmlFor="name">Tên sự kiện *</Label>
+
+              <Input
+                id="name"
+                required
+                maxLength={120}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="VD: Workshop UI/UX cơ bản"
+              />
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="desc">Mô tả</Label>
               <Textarea
                 id="desc"
@@ -181,77 +197,73 @@ function CreateEvent() {
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="when">Ngày & giờ *</Label>
-                <Input
-                  id="when"
-                  type="datetime-local"
-                  required
-                  min={minStartsAt}
-                  max={maxStartsAt}
-                  value={startsAt}
-                  onChange={(e) => setStartsAt(e.target.value)}
-                />
+            {/* NGÀY & GIỜ */}
+            <div className="space-y-1.5">
+              <Label htmlFor="when">Ngày & giờ *</Label>
+
+              <Input
+                id="when"
+                type="datetime-local"
+                required
+                min={minStartsAt}
+                max={maxStartsAt}
+                value={startsAt}
+                onChange={(e) => setStartsAt(e.target.value)}
+              />
+            </div>
+
+            {/* ĐỊA ĐIỂM TỔ CHỨC */}
+            <div className="space-y-3 rounded-lg border border-border p-4">
+              <div>
+                <Label>Địa điểm tổ chức</Label>
+
+                <p className="text-xs text-muted-foreground">
+                  Tìm địa điểm bằng VietMap. Bạn cũng có thể kéo ghim hoặc bấm trên bản đồ để chỉnh
+                  lại vị trí.
+                </p>
               </div>
+
+              <EventLocationPicker
+                latitude={latitude}
+                longitude={longitude}
+                address={location}
+                onChange={(lat, lng, newAddress) => {
+                  setLatitude(lat);
+                  setLongitude(lng);
+
+                  if (newAddress) {
+                    setLocation(newAddress);
+                  }
+                }}
+              />
+
               <div className="space-y-1.5">
-                <Label htmlFor="loc">Địa điểm</Label>
-                <Input
-                  id="loc"
-                  maxLength={200}
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Phòng 102, Tòa nhà ABC"
-                />
-              </div>
-              <div className="space-y-3 rounded-lg border p-4">
-                <div>
-                  <Label>Địa điểm tổ chức</Label>
+                <Label htmlFor="checkin-radius">Bán kính check-in *</Label>
 
-                  <p className="text-xs text-muted-foreground">
-                    Tìm địa điểm bằng Google và chọn đúng vị trí tổ chức sự kiện.
-                  </p>
-                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="checkin-radius"
+                    type="number"
+                    required
+                    min={20}
+                    max={5000}
+                    value={checkinRadius}
+                    onChange={(e) => setCheckinRadius(e.target.value)}
+                    placeholder="200"
+                  />
 
-                <EventLocationPicker
-                  latitude={latitude}
-                  longitude={longitude}
-                  address={location}
-                  onChange={(lat, lng, newAddress) => {
-                    setLatitude(lat);
-                    setLongitude(lng);
-
-                    if (newAddress) {
-                      setLocation(newAddress);
-                    }
-                  }}
-                />
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="checkin-radius">Bán kính cho phép check-in</Label>
-
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="checkin-radius"
-                      type="number"
-                      min={20}
-                      max={5000}
-                      value={checkinRadius}
-                      onChange={(e) => setCheckinRadius(e.target.value)}
-                      placeholder="200"
-                    />
-
-                    <span className="text-sm text-muted-foreground">mét</span>
-                  </div>
+                  <span className="text-sm text-muted-foreground">mét</span>
                 </div>
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="expected">Số người dự kiến</Label>
+              <Label htmlFor="expected">Số người dự kiến *</Label>
+
               <Input
                 id="expected"
                 type="number"
+                required
                 min={1}
                 max={100000}
                 value={expected}

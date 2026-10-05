@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
 import { supabase } from "@/integrations/supabase/client";
-
+import { AuthenticatedHeader } from "@/components/AuthenticatedHeader";
 import {
   clearAuthSessionStartedAt,
   ensureAuthSessionStartedAt,
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_authenticated")({
       clearAuthSessionStartedAt();
 
       throw redirect({
-        to: "/login",
+        to: "/",
         search: {},
       });
     }
@@ -36,7 +36,7 @@ export const Route = createFileRoute("/_authenticated")({
       });
 
       throw redirect({
-        to: "/login",
+        to: "/",
         search: {},
       });
     }
@@ -84,5 +84,10 @@ function AuthenticatedLayout() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  return <Outlet />;
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <AuthenticatedHeader />
+      <Outlet />
+    </div>
+  );
 }

@@ -158,12 +158,14 @@ function EditEvent() {
       return;
     }
 
-    const expectedNumber = expected.trim() ? Number(expected) : null;
+    if (!expected.trim()) {
+      toast.error("Vui lòng nhập số người dự kiến.");
+      return;
+    }
 
-    if (
-      expectedNumber !== null &&
-      (!Number.isInteger(expectedNumber) || expectedNumber < 1 || expectedNumber > 100000)
-    ) {
+    const expectedNumber = Number(expected);
+
+    if (!Number.isInteger(expectedNumber) || expectedNumber < 1 || expectedNumber > 100000) {
       toast.error("Số người dự kiến không hợp lệ.");
       return;
     }
@@ -336,11 +338,12 @@ function EditEvent() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="expected">Số người dự kiến</Label>
+              <Label htmlFor="expected">Số người dự kiến *</Label>
 
               <Input
                 id="expected"
                 type="number"
+                required
                 min={1}
                 max={100000}
                 value={expected}

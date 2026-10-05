@@ -1,13 +1,20 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type ReactNode, useState } from "react";
+
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+
 import { ArrowRight, BarChart3, CalendarPlus, QrCode, Sparkles, Users } from "lucide-react";
+
+import { AuthModal } from "@/components/AuthModal";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Joinly — Quản lý sự kiện & người tham gia bằng QR" },
+      {
+        title: "Joinly — Quản lý sự kiện & người tham gia bằng QR",
+      },
       {
         name: "description",
         content:
@@ -15,12 +22,35 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
+
   component: Landing,
 });
 
+type AuthActionsProps = {
+  loggedIn: boolean;
+  loading: boolean;
+  onLogin: () => void;
+  onCreateEvent: () => void;
+};
+
 function Landing() {
   const { user, loading } = useAuth();
+
   const navigate = useNavigate();
+
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  const [authNextPath, setAuthNextPath] = useState("/my-events");
+
+  const openLoginModal = () => {
+    setAuthNextPath("/my-events");
+    setAuthModalOpen(true);
+  };
+
+  const openCreateEventModal = () => {
+    setAuthNextPath("/create-event");
+    setAuthModalOpen(true);
+  };
 
   useEffect(() => {
     if (!loading && user) {
@@ -43,22 +73,44 @@ function Landing() {
 
   // Chỉ người CHƯA đăng nhập mới thấy landing page
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Header loggedIn={false} loading={false} />
+    <>
+      <div className="min-h-screen bg-background text-foreground">
+        <Header
+          loggedIn={false}
+          loading={false}
+          onLogin={openLoginModal}
+          onCreateEvent={openCreateEventModal}
+        />
 
-      <main>
-        <Hero loggedIn={false} loading={false} />
-        <Features />
-        <HowItWorks />
-        <CTA loggedIn={false} loading={false} />
-      </main>
+        <main>
+          <Hero
+            loggedIn={false}
+            loading={false}
+            onLogin={openLoginModal}
+            onCreateEvent={openCreateEventModal}
+          />
 
-      <Footer />
-    </div>
+          <Features />
+
+          <HowItWorks />
+
+          <CTA
+            loggedIn={false}
+            loading={false}
+            onLogin={openLoginModal}
+            onCreateEvent={openCreateEventModal}
+          />
+        </main>
+
+        <Footer />
+      </div>
+
+      <AuthModal open={authModalOpen} onOpenChange={setAuthModalOpen} nextPath={authNextPath} />
+    </>
   );
 }
 
-function Header({ loggedIn, loading }: { loggedIn: boolean; loading: boolean }) {
+function Header({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps) {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
@@ -86,6 +138,8 @@ function Header({ loggedIn, loading }: { loggedIn: boolean; loading: boolean }) 
 
         {/* AUTH BUTTONS */}
         <div className="flex items-center gap-2">
+          <ThemeToggle />
+
           {loading ? (
             <span className="text-sm text-muted-foreground">Đang kiểm tra...</span>
           ) : loggedIn ? (
@@ -107,20 +161,22 @@ function Header({ loggedIn, loading }: { loggedIn: boolean; loading: boolean }) 
             </>
           ) : (
             <>
-              <Link
-                to="/login"
+              <button
+                type="button"
+                onClick={onLogin}
                 className="hidden rounded-md px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent sm:inline-flex"
               >
                 Đăng nhập
-              </Link>
+              </button>
 
-              <Link
-                to="/login"
+              <button
+                type="button"
+                onClick={onCreateEvent}
                 className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:opacity-90"
               >
                 Tạo sự kiện
                 <ArrowRight className="h-4 w-4" />
-              </Link>
+              </button>
             </>
           )}
         </div>
@@ -137,9 +193,14 @@ function Logo() {
   );
 }
 
-function Hero({ loggedIn, loading }: { loggedIn: boolean; loading: boolean }) {
+function Hero({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps) {
   return (
-    <section className="relative overflow-hidden" style={{ background: "var(--gradient-hero)" }}>
+    <section
+      className="relative overflow-hidden"
+      style={{
+        background: "var(--gradient-hero)",
+      }}
+    >
       <div className="mx-auto max-w-6xl px-6 py-24 md:py-32">
         <div className="mx-auto max-w-3xl text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-4 py-1.5 text-xs font-medium text-primary backdrop-blur">
@@ -176,10 +237,10 @@ function Hero({ loggedIn, loading }: { loggedIn: boolean; loading: boolean }) {
                   Vui lòng chờ
                 </button>
               </>
-            ) : (
+            ) : loggedIn ? (
               <>
                 <Link
-                  to={loggedIn ? "/create-event" : "/login"}
+                  to="/create-event"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-7 py-3.5 text-base font-semibold text-primary-foreground transition-all hover:opacity-90 sm:w-auto"
                   style={{
                     boxShadow: "var(--shadow-elegant)",
@@ -190,11 +251,33 @@ function Hero({ loggedIn, loading }: { loggedIn: boolean; loading: boolean }) {
                 </Link>
 
                 <Link
-                  to={loggedIn ? "/my-events" : "/login"}
+                  to="/my-events"
                   className="inline-flex w-full items-center justify-center rounded-lg border border-border bg-background px-7 py-3.5 text-base font-semibold text-foreground transition-colors hover:bg-accent sm:w-auto"
                 >
-                  {loggedIn ? "Sự kiện của tôi" : "Đăng nhập"}
+                  Sự kiện của tôi
                 </Link>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onCreateEvent}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-7 py-3.5 text-base font-semibold text-primary-foreground transition-all hover:opacity-90 sm:w-auto"
+                  style={{
+                    boxShadow: "var(--shadow-elegant)",
+                  }}
+                >
+                  Tạo sự kiện
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onLogin}
+                  className="inline-flex w-full items-center justify-center rounded-lg border border-border bg-background px-7 py-3.5 text-base font-semibold text-foreground transition-colors hover:bg-accent sm:w-auto"
+                >
+                  Đăng nhập
+                </button>
               </>
             )}
           </div>
@@ -287,19 +370,25 @@ function Features() {
   const items = [
     {
       icon: <CalendarPlus className="h-6 w-6" />,
+
       title: "Tạo sự kiện nhanh",
+
       desc: "Đặt tên, thời gian, địa điểm và các phòng tham gia. Dùng được cho workshop, hội thảo, lớp học, đám cưới hay sự kiện nội bộ.",
     },
 
     {
       icon: <QrCode className="h-6 w-6" />,
+
       title: "QR tham gia phòng",
+
       desc: "Mỗi phòng có một mã QR riêng. Người tham gia quét QR, điền form và được ghi nhận vào đúng phòng.",
     },
 
     {
       icon: <BarChart3 className="h-6 w-6" />,
+
       title: "Dashboard dữ liệu",
+
       desc: "Xem số người tham gia theo từng phòng, tìm kiếm danh sách và xuất file CSV khi cần.",
     },
   ];
@@ -344,19 +433,25 @@ function HowItWorks() {
   const steps = [
     {
       n: "01",
+
       title: "Tạo sự kiện",
+
       desc: "Đăng nhập, tạo sự kiện và thêm các phòng tham gia bạn cần.",
     },
 
     {
       n: "02",
+
       title: "Chia sẻ QR",
+
       desc: "Mỗi phòng có một mã QR riêng. In ra hoặc chiếu lên màn hình tại sự kiện.",
     },
 
     {
       n: "03",
+
       title: "Xem dữ liệu",
+
       desc: "Theo dõi danh sách người tham gia theo từng phòng và xuất CSV khi cần.",
     },
   ];
@@ -390,13 +485,14 @@ function HowItWorks() {
   );
 }
 
-function CTA({ loggedIn, loading }: { loggedIn: boolean; loading: boolean }) {
+function CTA({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps) {
   return (
     <section className="mx-auto max-w-6xl px-6 py-24">
       <div
         className="relative overflow-hidden rounded-3xl px-8 py-16 text-center md:px-16 md:py-20"
         style={{
           background: "var(--gradient-primary)",
+
           boxShadow: "var(--shadow-elegant)",
         }}
       >
@@ -429,10 +525,10 @@ function CTA({ loggedIn, loading }: { loggedIn: boolean; loading: boolean }) {
                 Vui lòng chờ
               </button>
             </>
-          ) : (
+          ) : loggedIn ? (
             <>
               <Link
-                to={loggedIn ? "/create-event" : "/login"}
+                to="/create-event"
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-background px-7 py-3.5 text-base font-semibold text-primary transition-transform hover:scale-[1.02]"
               >
                 Tạo sự kiện
@@ -440,11 +536,30 @@ function CTA({ loggedIn, loading }: { loggedIn: boolean; loading: boolean }) {
               </Link>
 
               <Link
-                to={loggedIn ? "/my-events" : "/login"}
+                to="/my-events"
                 className="inline-flex items-center justify-center rounded-lg border border-primary-foreground/30 px-7 py-3.5 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/10"
               >
-                {loggedIn ? "Sự kiện của tôi" : "Đăng nhập"}
+                Sự kiện của tôi
               </Link>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onCreateEvent}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-background px-7 py-3.5 text-base font-semibold text-primary transition-transform hover:scale-[1.02]"
+              >
+                Tạo sự kiện
+                <ArrowRight className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={onLogin}
+                className="inline-flex items-center justify-center rounded-lg border border-primary-foreground/30 px-7 py-3.5 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/10"
+              >
+                Đăng nhập
+              </button>
             </>
           )}
         </div>

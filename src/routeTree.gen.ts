@@ -11,13 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AuthenticatedCreateEventRouteImport } from './routes/_authenticated/create-event'
 import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
+import { Route as AuthPopupCallbackRouteImport } from './routes/auth/popup-callback'
 import { Route as JoinIdRouteImport } from './routes/join.$id'
 import { Route as AuthenticatedCheckInIdRouteImport } from './routes/_authenticated/check-in.$id'
 import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
@@ -37,16 +36,6 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -74,6 +63,11 @@ const AuthenticatedMyEventsRoute = AuthenticatedMyEventsRouteImport.update({
   id: '/my-events',
   path: '/my-events',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthPopupCallbackRoute = AuthPopupCallbackRouteImport.update({
+  id: '/auth/popup-callback',
+  path: '/auth/popup-callback',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const JoinIdRoute = JoinIdRouteImport.update({
   id: '/join/$id',
@@ -138,13 +132,12 @@ const AuthenticatedDashboardIdAllowlistTsxRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
+  '/auth/popup-callback': typeof AuthPopupCallbackRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -159,13 +152,12 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
+  '/auth/popup-callback': typeof AuthPopupCallbackRoute
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
@@ -181,13 +173,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/_authenticated/create-event': typeof AuthenticatedCreateEventRoute
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
+  '/auth/popup-callback': typeof AuthPopupCallbackRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/_authenticated/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -204,13 +195,12 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/forgot-password'
-    | '/login'
     | '/privacy'
     | '/reset-password'
     | '/terms'
     | '/create-event'
     | '/my-events'
+    | '/auth/popup-callback'
     | '/join/$id'
     | '/check-in/$id'
     | '/dashboard/$id'
@@ -225,13 +215,12 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/forgot-password'
-    | '/login'
     | '/privacy'
     | '/reset-password'
     | '/terms'
     | '/create-event'
     | '/my-events'
+    | '/auth/popup-callback'
     | '/check-in/$id'
     | '/dashboard/$id'
     | '/edit-event/$id'
@@ -246,13 +235,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
-    | '/forgot-password'
-    | '/login'
     | '/privacy'
     | '/reset-password'
     | '/terms'
     | '/_authenticated/create-event'
     | '/_authenticated/my-events'
+    | '/auth/popup-callback'
     | '/join/$id'
     | '/_authenticated/check-in/$id'
     | '/_authenticated/dashboard/$id'
@@ -269,11 +257,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  ForgotPasswordRoute: typeof ForgotPasswordRoute
-  LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermsRoute: typeof TermsRoute
+  AuthPopupCallbackRoute: typeof AuthPopupCallbackRoute
   JoinIdRoute: typeof JoinIdRouteWithChildren
 }
 
@@ -291,20 +278,6 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -341,6 +314,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/my-events'
       preLoaderRoute: typeof AuthenticatedMyEventsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/auth/popup-callback': {
+      id: '/auth/popup-callback'
+      path: '/auth/popup-callback'
+      fullPath: '/auth/popup-callback'
+      preLoaderRoute: typeof AuthPopupCallbackRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/join/$id': {
       id: '/join/$id'
@@ -468,11 +448,10 @@ const JoinIdRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  ForgotPasswordRoute: ForgotPasswordRoute,
-  LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   TermsRoute: TermsRoute,
+  AuthPopupCallbackRoute: AuthPopupCallbackRoute,
   JoinIdRoute: JoinIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport

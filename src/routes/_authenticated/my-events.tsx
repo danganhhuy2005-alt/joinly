@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   CalendarPlus,
@@ -7,7 +7,6 @@ import {
   MapPin,
   BarChart3,
   QrCode,
-  LogOut,
   Sparkles,
   Loader2,
   Trash2,
@@ -27,7 +26,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { createDemoEventData, deleteDemoEventData } from "@/lib/demo-data.functions";
 import { getEventRole, type EventRole } from "@/lib/event-role";
-import { clearAuthSessionStartedAt } from "@/lib/auth-session";
 
 type EventRow = {
   id: string;
@@ -48,7 +46,6 @@ export const Route = createFileRoute("/_authenticated/my-events")({
 });
 
 function MyEvents() {
-  const navigate = useNavigate();
   const [events, setEvents] = useState<EventWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [clubName, setClubName] = useState<string>("");
@@ -134,18 +131,6 @@ function MyEvents() {
     }
   };
 
-  const onLogout = async () => {
-    clearAuthSessionStartedAt();
-
-    await supabase.auth.signOut();
-
-    toast.success("Đã đăng xuất");
-
-    navigate({
-      to: "/",
-    });
-  };
-
   const ownedEvents = events.filter((event) => event.access_role === "owner");
 
   const managedEvents = events.filter(
@@ -154,24 +139,6 @@ function MyEvents() {
 
   return (
     <div className="min-h-screen bg-secondary/30">
-      <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link to="/my-events" className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Sparkles className="h-4 w-4" strokeWidth={2.5} />
-            </span>
-
-            <span className="font-display text-xl font-bold">Joinly</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-muted-foreground sm:inline">{clubName}</span>
-            <Button variant="outline" size="sm" onClick={onLogout}>
-              <LogOut className="h-4 w-4" /> Đăng xuất
-            </Button>
-          </div>
-        </div>
-      </header>
-
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -281,7 +248,7 @@ function MyEvents() {
 
 function EmptyState() {
   return (
-    <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center">
+    <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
       <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary">
         <CalendarPlus className="h-7 w-7" />
       </div>

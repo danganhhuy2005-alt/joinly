@@ -16,7 +16,6 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AuthenticatedCreateEventRouteImport } from './routes/_authenticated/create-event'
 import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
-import { Route as AuthPopupCallbackRouteImport } from './routes/auth/popup-callback'
 import { Route as JoinIdRouteImport } from './routes/join.$id'
 import { Route as AuthenticatedCheckInIdRouteImport } from './routes/_authenticated/check-in.$id'
 import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
@@ -63,11 +62,6 @@ const AuthenticatedMyEventsRoute = AuthenticatedMyEventsRouteImport.update({
   id: '/my-events',
   path: '/my-events',
   getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthPopupCallbackRoute = AuthPopupCallbackRouteImport.update({
-  id: '/auth/popup-callback',
-  path: '/auth/popup-callback',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const JoinIdRoute = JoinIdRouteImport.update({
   id: '/join/$id',
@@ -137,7 +131,6 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
-  '/auth/popup-callback': typeof AuthPopupCallbackRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -157,7 +150,6 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
-  '/auth/popup-callback': typeof AuthPopupCallbackRoute
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
@@ -178,7 +170,6 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/_authenticated/create-event': typeof AuthenticatedCreateEventRoute
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
-  '/auth/popup-callback': typeof AuthPopupCallbackRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/_authenticated/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -200,7 +191,6 @@ export interface FileRouteTypes {
     | '/terms'
     | '/create-event'
     | '/my-events'
-    | '/auth/popup-callback'
     | '/join/$id'
     | '/check-in/$id'
     | '/dashboard/$id'
@@ -220,7 +210,6 @@ export interface FileRouteTypes {
     | '/terms'
     | '/create-event'
     | '/my-events'
-    | '/auth/popup-callback'
     | '/check-in/$id'
     | '/dashboard/$id'
     | '/edit-event/$id'
@@ -240,7 +229,6 @@ export interface FileRouteTypes {
     | '/terms'
     | '/_authenticated/create-event'
     | '/_authenticated/my-events'
-    | '/auth/popup-callback'
     | '/join/$id'
     | '/_authenticated/check-in/$id'
     | '/_authenticated/dashboard/$id'
@@ -260,7 +248,6 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermsRoute: typeof TermsRoute
-  AuthPopupCallbackRoute: typeof AuthPopupCallbackRoute
   JoinIdRoute: typeof JoinIdRouteWithChildren
 }
 
@@ -314,13 +301,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/my-events'
       preLoaderRoute: typeof AuthenticatedMyEventsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/auth/popup-callback': {
-      id: '/auth/popup-callback'
-      path: '/auth/popup-callback'
-      fullPath: '/auth/popup-callback'
-      preLoaderRoute: typeof AuthPopupCallbackRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/join/$id': {
       id: '/join/$id'
@@ -451,7 +431,6 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   TermsRoute: TermsRoute,
-  AuthPopupCallbackRoute: AuthPopupCallbackRoute,
   JoinIdRoute: JoinIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport

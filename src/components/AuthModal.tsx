@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Link } from "@tanstack/react-router";
 
-import { ArrowRight, Loader2, Eye, EyeOff, Sparkles } from "lucide-react";
+import { Loader2, Eye, EyeOff, Sparkles } from "lucide-react";
 
 import { toast } from "sonner";
+
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,8 +54,6 @@ export function AuthModal({ open, onOpenChange, nextPath }: AuthModalProps) {
 
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const popupRef = useRef<Window | null>(null);
-
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
@@ -77,58 +77,6 @@ export function AuthModal({ open, onOpenChange, nextPath }: AuthModalProps) {
     setLoading(false);
     setGoogleLoading(false);
   }, [open]);
-
-  // ==========================================
-  // NHẬN KẾT QUẢ GOOGLE POPUP
-  // ==========================================
-
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) {
-        return;
-      }
-
-      if (event.data?.type !== "joinly-auth-success") {
-        return;
-      }
-
-      popupRef.current?.close();
-
-      setGoogleLoading(false);
-
-      onOpenChange(false);
-
-      window.location.href = safeNextPath;
-    };
-
-    window.addEventListener("message", handleMessage);
-
-    return () => {
-      window.removeEventListener("message", handleMessage);
-    };
-  }, [onOpenChange, safeNextPath]);
-
-  useEffect(() => {
-    const channel = new BroadcastChannel("joinly-auth");
-
-    channel.onmessage = (event) => {
-      if (event.data?.type !== "joinly-auth-success") {
-        return;
-      }
-
-      popupRef.current?.close();
-
-      setGoogleLoading(false);
-
-      onOpenChange(false);
-
-      window.location.href = safeNextPath;
-    };
-
-    return () => {
-      channel.close();
-    };
-  }, [onOpenChange, safeNextPath]);
 
   // ==========================================
   // EMAIL / PASSWORD
@@ -270,91 +218,6 @@ export function AuthModal({ open, onOpenChange, nextPath }: AuthModalProps) {
   // GOOGLE
   // GIỮ AUTH CŨ, CHỈ ĐỔI SANG POPUP
   // ==========================================
-
-  const onGoogle = async () => {
-    const width = 520;
-    const height = 680;
-
-    const left = window.screenX + (window.outerWidth - width) / 2;
-
-    const top = window.screenY + (window.outerHeight - height) / 2;
-
-    /*
-     * Mở popup TRƯỚC await
-     * để trình duyệt không chặn.
-     */
-    const popup = window.open(
-      "about:blank",
-
-      "joinly-google-auth",
-
-      [
-        "popup=yes",
-        `width=${width}`,
-        `height=${height}`,
-        `left=${Math.round(left)}`,
-        `top=${Math.round(top)}`,
-      ].join(","),
-    );
-
-    if (!popup) {
-      toast.error("Trình duyệt đang chặn cửa sổ đăng nhập. Hãy cho phép popup cho Joinly.");
-
-      return;
-    }
-
-    popupRef.current = popup;
-
-    setGoogleLoading(true);
-
-    try {
-      const callbackUrl = new URL("/auth/popup-callback", window.location.origin);
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-
-        options: {
-          redirectTo: callbackUrl.toString(),
-
-          skipBrowserRedirect: true,
-
-          queryParams: {
-            prompt: "select_account",
-          },
-        },
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      if (!data.url) {
-        throw new Error("Không nhận được URL đăng nhập Google.");
-      }
-
-      popup.location.href = data.url;
-
-      popup.focus();
-
-      const popupWatcher = window.setInterval(() => {
-        if (!popup.closed) {
-          return;
-        }
-
-        window.clearInterval(popupWatcher);
-
-        setGoogleLoading(false);
-      }, 500);
-    } catch (error) {
-      popup.close();
-
-      setGoogleLoading(false);
-
-      const message = error instanceof Error ? error.message : "Đã có lỗi xảy ra";
-
-      toast.error(`Không thể đăng nhập với Google: ${message}`);
-    }
-  };
 
   //====================================
   // Forget password
@@ -616,33 +479,13 @@ export function AuthModal({ open, onOpenChange, nextPath }: AuthModalProps) {
               </div>
 
               {/* GOOGLE */}
-              <Button
-                type="button"
-                variant="outline"
-                className="h-auto w-full justify-between px-4 py-3"
-                onClick={() => void onGoogle()}
-                disabled={googleLoading || loading}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-secondary">
-                    <GoogleIcon />
-                  </span>
-
-                  <div className="text-left">
-                    <p className="font-semibold">Tiếp tục với Google</p>
-
-                    <p className="text-xs font-normal text-muted-foreground">
-                      Chọn tài khoản Google của bạn
-                    </p>
-                  </div>
-                </div>
-
-                {googleLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                )}
-              </Button>
+              <GoogleSignInButton
+                disabled={loading}
+                onSuccess={() => {
+                  onOpenChange(false);
+                  window.location.href = safeNextPath;
+                }}
+              />
 
               {/* LOGIN <-> SIGNUP */}
               <p className="mt-6 text-center text-sm text-muted-foreground">
@@ -688,31 +531,5 @@ export function AuthModal({ open, onOpenChange, nextPath }: AuthModalProps) {
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <path
-        fill="#4285F4"
-        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-      />
-
-      <path
-        fill="#34A853"
-        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"
-      />
-
-      <path
-        fill="#FBBC05"
-        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A11 11 0 0 0 1 12c0 1.78.43 3.46 1.18 4.93l3.66-2.84z"
-      />
-
-      <path
-        fill="#EA4335"
-        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"
-      />
-    </svg>
   );
 }

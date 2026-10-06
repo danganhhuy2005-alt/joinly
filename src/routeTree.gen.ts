@@ -22,6 +22,7 @@ import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenti
 import { Route as AuthenticatedEditEventIdRouteImport } from './routes/_authenticated/edit-event.$id'
 import { Route as AuthenticatedEventIdRouteImport } from './routes/_authenticated/event.$id'
 import { Route as AuthenticatedManageEventIdRouteImport } from './routes/_authenticated/manage-event.$id'
+import { Route as ApiSepayWebhookRouteImport } from './routes/api.sepay.webhook'
 import { Route as JoinIdIndexRouteImport } from './routes/join.$id.index'
 import { Route as JoinIdRoomIdRouteImport } from './routes/join.$id.$roomId'
 import { Route as AuthenticatedDashboardIdMembersRouteImport } from './routes/_authenticated/dashboard_.$id.members'
@@ -96,6 +97,11 @@ const AuthenticatedManageEventIdRoute =
     path: '/manage-event/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiSepayWebhookRoute = ApiSepayWebhookRouteImport.update({
+  id: '/api/sepay/webhook',
+  path: '/api/sepay/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const JoinIdIndexRoute = JoinIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
   '/manage-event/$id': typeof AuthenticatedManageEventIdRoute
+  '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id/': typeof JoinIdIndexRoute
   '/dashboard/$id/members': typeof AuthenticatedDashboardIdMembersRoute
@@ -155,6 +162,7 @@ export interface FileRoutesByTo {
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
   '/manage-event/$id': typeof AuthenticatedManageEventIdRoute
+  '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id': typeof JoinIdIndexRoute
   '/dashboard/$id/members': typeof AuthenticatedDashboardIdMembersRoute
@@ -176,6 +184,7 @@ export interface FileRoutesById {
   '/_authenticated/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/_authenticated/event/$id': typeof AuthenticatedEventIdRoute
   '/_authenticated/manage-event/$id': typeof AuthenticatedManageEventIdRoute
+  '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id/': typeof JoinIdIndexRoute
   '/_authenticated/dashboard_/$id/members': typeof AuthenticatedDashboardIdMembersRoute
@@ -197,6 +206,7 @@ export interface FileRouteTypes {
     | '/edit-event/$id'
     | '/event/$id'
     | '/manage-event/$id'
+    | '/api/sepay/webhook'
     | '/join/$id/$roomId'
     | '/join/$id/'
     | '/dashboard/$id/members'
@@ -215,6 +225,7 @@ export interface FileRouteTypes {
     | '/edit-event/$id'
     | '/event/$id'
     | '/manage-event/$id'
+    | '/api/sepay/webhook'
     | '/join/$id/$roomId'
     | '/join/$id'
     | '/dashboard/$id/members'
@@ -235,6 +246,7 @@ export interface FileRouteTypes {
     | '/_authenticated/edit-event/$id'
     | '/_authenticated/event/$id'
     | '/_authenticated/manage-event/$id'
+    | '/api/sepay/webhook'
     | '/join/$id/$roomId'
     | '/join/$id/'
     | '/_authenticated/dashboard_/$id/members'
@@ -249,6 +261,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermsRoute: typeof TermsRoute
   JoinIdRoute: typeof JoinIdRouteWithChildren
+  ApiSepayWebhookRoute: typeof ApiSepayWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -344,6 +357,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedManageEventIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/sepay/webhook': {
+      id: '/api/sepay/webhook'
+      path: '/api/sepay/webhook'
+      fullPath: '/api/sepay/webhook'
+      preLoaderRoute: typeof ApiSepayWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/join/$id/': {
       id: '/join/$id/'
       path: '/'
@@ -432,6 +452,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   TermsRoute: TermsRoute,
   JoinIdRoute: JoinIdRouteWithChildren,
+  ApiSepayWebhookRoute: ApiSepayWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -18,6 +18,14 @@ type SePayWebhookPayload = {
 export const Route = createFileRoute("/api/sepay/webhook")({
   server: {
     handlers: {
+      GET: async () => {
+        return Response.json({
+          success: true,
+          service: "Joinly SePay Webhook",
+          status: "online",
+        });
+      },
+
       POST: async ({ request }) => {
         try {
           // ======================================

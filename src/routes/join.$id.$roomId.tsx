@@ -153,6 +153,19 @@ function JoinRoomPage() {
       setStep("not_allowed");
       return;
     }
+
+    if (result.status === "full") {
+      toast.error("Sự kiện đã đủ số lượng người tham gia. Vui lòng liên hệ ban tổ chức.", {
+        duration: 6000,
+      });
+      return;
+    }
+
+    if (result.status === "not_active") {
+      toast.error("Sự kiện chưa được kích hoạt hoặc chưa mở đăng ký.", { duration: 6000 });
+      return;
+    }
+
     if (result.status === "duplicate") {
       toast.error(
         "Email hoặc MSSV này đã được đăng ký trong phòng. Vui lòng kiểm tra lại hoặc liên hệ ban tổ chức.",

@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { Sparkles, Calendar, MapPin, Loader2, DoorOpen, ArrowRight, Check, ExternalLink } from "lucide-react";
+import {
+  Sparkles,
+  Calendar,
+  MapPin,
+  Loader2,
+  DoorOpen,
+  ArrowRight,
+  Check,
+  ExternalLink,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { getJoined, type JoinedInfo } from "@/lib/joined-events";
@@ -10,7 +19,13 @@ export const Route = createFileRoute("/join/$id/")({
   component: JoinPickRoom,
 });
 
-type EventRow = { id: string; name: string; description: string | null; location: string | null; starts_at: string | null };
+type EventRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  location: string | null;
+  starts_at: string | null;
+};
 type Room = { id: string; name: string };
 
 function JoinPickRoom() {
@@ -24,7 +39,11 @@ function JoinPickRoom() {
     setJoinedState(getJoined(id));
     (async () => {
       const [{ data: ev }, { data: rms }] = await Promise.all([
-        supabase.from("events").select("id, name, description, location, starts_at").eq("id", id).maybeSingle(),
+        supabase
+          .from("events")
+          .select("id, name, description, location, starts_at")
+          .eq("id", id)
+          .maybeSingle(),
         (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> })
           .from("event_rooms_public")
           .select("id, name")
@@ -56,7 +75,9 @@ function JoinPickRoom() {
   }
 
   // If the stored room no longer belongs to this event's room list, ignore it.
-  const joinedRoomValid = joined ? rooms.some((r) => r.id === joined.roomId) || rooms.length === 0 : false;
+  const joinedRoomValid = joined
+    ? rooms.some((r) => r.id === joined.roomId) || rooms.length === 0
+    : false;
   const showJoined = joined && joinedRoomValid;
 
   const date = event.starts_at ? new Date(event.starts_at) : null;
@@ -72,7 +93,9 @@ function JoinPickRoom() {
         </div>
         <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
           <h1 className="font-display text-2xl font-bold leading-tight">{event.name}</h1>
-          {event.description && <p className="mt-2 text-sm text-muted-foreground">{event.description}</p>}
+          {event.description && (
+            <p className="mt-2 text-sm text-muted-foreground">{event.description}</p>
+          )}
           <div className="mt-4 space-y-1.5 text-sm text-muted-foreground">
             {date && (
               <div className="flex items-center gap-2">
@@ -119,7 +142,9 @@ function JoinPickRoom() {
             <div className="mt-6">
               <h2 className="text-sm font-semibold">Chọn phòng để tham gia</h2>
               {rooms.length === 0 ? (
-                <p className="mt-3 text-sm text-muted-foreground">Sự kiện chưa có phòng nào. Vui lòng liên hệ ban tổ chức.</p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Sự kiện chưa có phòng nào. Vui lòng liên hệ ban tổ chức.
+                </p>
               ) : (
                 <ul className="mt-3 space-y-2">
                   {rooms.map((r) => (

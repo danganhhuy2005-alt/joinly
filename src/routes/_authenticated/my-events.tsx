@@ -35,6 +35,11 @@ type EventRow = {
   starts_at: string | null;
   created_at: string;
   is_demo: boolean;
+
+  lifecycle_status: "draft" | "active";
+  requested_plan_code: string | null;
+  expected_attendees: number | null;
+  draft_updated_at: string | null;
 };
 type EventWithRole = EventRow & {
   access_role: Exclude<EventRole, null>;
@@ -54,6 +59,9 @@ function MyEvents() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const createDemo = useServerFn(createDemoEventData);
   const deleteDemo = useServerFn(deleteDemoEventData);
+  const [draftToDelete, setDraftToDelete] = useState<EventWithRole | null>(null);
+
+  const [deletingDraft, setDeletingDraft] = useState(false);
 
   const load = async () => {
     const {
@@ -131,10 +139,44 @@ function MyEvents() {
     }
   };
 
-  const ownedEvents = events.filter((event) => event.access_role === "owner");
+  const onDeleteDraft = async () => {
+    if (!draftToDelete || deletingDraft) return;
+
+    setDeletingDraft(true);
+
+    try {
+      const { error } = await supabase.rpc("delete_unpaid_event_draft", {
+        p_event_id: draftToDelete.id,
+      });
+
+      if (error) throw error;
+
+      toast.success("Đã xóa bản nháp.");
+      setDraftToDelete(null);
+
+      await load();
+    } catch (error) {
+      console.error("Delete draft error:", error);
+
+      toast.error(error instanceof Error ? error.message : "Không thể xóa bản nháp.");
+    } finally {
+      setDeletingDraft(false);
+    }
+  };
+
+  const draftEvents = events.filter(
+    (event) => event.access_role === "owner" && event.lifecycle_status === "draft",
+  );
+  const isDraftLimitReached = draftEvents.length >= 3;
+
+  const ownedEvents = events.filter(
+    (event) => event.access_role === "owner" && event.lifecycle_status === "active",
+  );
 
   const managedEvents = events.filter(
-    (event) => event.access_role === "co_owner" || event.access_role === "manager",
+    (event) =>
+      event.lifecycle_status === "active" &&
+      (event.access_role === "co_owner" || event.access_role === "manager"),
   );
 
   return (
@@ -169,13 +211,36 @@ function MyEvents() {
               )}
               Xoá dữ liệu demo{demoCount > 0 ? ` (${demoCount})` : ""}
             </Button>
-            <Button asChild size="lg">
-              <Link to="/create-event">
-                <CalendarPlus className="h-4 w-4" /> Tạo sự kiện mới
-              </Link>
+
+            <Button
+              asChild={!loading && !isDraftLimitReached}
+              size="lg"
+              disabled={loading || isDraftLimitReached}
+              title={
+                isDraftLimitReached ? "Bạn đã có tối đa 3 bản nháp chưa thanh toán." : undefined
+              }
+            >
+              {loading || isDraftLimitReached ? (
+                <span>
+                  <CalendarPlus className="h-4 w-4" />
+                  Tạo sự kiện mới
+                </span>
+              ) : (
+                <Link to="/create-event" search={{}}>
+                  <CalendarPlus className="h-4 w-4" />
+                  Tạo sự kiện mới
+                </Link>
+              )}
             </Button>
           </div>
         </div>
+
+        {!loading && isDraftLimitReached && (
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">
+            Bạn đã có đủ 3/3 bản nháp chưa thanh toán. Vui lòng hoàn tất thanh toán hoặc xóa một bản
+            nháp để có thể tạo sự kiện mới.
+          </div>
+        )}
 
         <div className="mt-8">
           {loading ? (
@@ -186,6 +251,71 @@ function MyEvents() {
             <EmptyState />
           ) : (
             <div className="space-y-10">
+              {draftEvents.length > 0 && (
+                <section>
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h2 className="font-display text-xl font-semibold">
+                        Bản nháp chưa thanh toán
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        Các sự kiện đang chờ hoàn tất thanh toán.
+                      </p>
+                    </div>
+
+                    <span className="rounded-full border px-3 py-1 text-sm">
+                      {draftEvents.length} / 3
+                    </span>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {draftEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        className="group rounded-2xl border border-border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+                      >
+                        <Link
+                          to="/manage-event/$id"
+                          params={{ id: event.id }}
+                          className="block cursor-pointer"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-semibold">{event.name}</h3>
+
+                            <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs text-amber-600">
+                              Bản nháp
+                            </span>
+                          </div>
+
+                          <p className="mt-3 text-sm text-muted-foreground">
+                            Gói:{" "}
+                            <strong>
+                              {event.requested_plan_code?.toUpperCase() ?? "Chưa chọn"}
+                            </strong>
+                          </p>
+
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Dự kiến: {event.expected_attendees ?? 0} người
+                          </p>
+                        </Link>
+
+                        <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDraftToDelete(event)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Xóa
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
               {ownedEvents.length > 0 && (
                 <section>
                   <div className="mb-4">
@@ -238,6 +368,42 @@ function MyEvents() {
             <AlertDialogCancel disabled={deleting}>Huỷ</AlertDialogCancel>
             <AlertDialogAction onClick={onDeleteDemo} disabled={deleting}>
               {deleting && <Loader2 className="h-4 w-4 animate-spin" />} Xoá dữ liệu demo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(draftToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deletingDraft) {
+            setDraftToDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa bản nháp?</AlertDialogTitle>
+
+            <AlertDialogDescription>
+              Bạn đang xóa bản nháp "{draftToDelete?.name}". Các mã thanh toán đang chờ sẽ bị hủy.
+              Nếu đã chuyển khoản, không tiếp tục xóa mà hãy chờ hệ thống xác nhận giao dịch.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingDraft}>Quay lại</AlertDialogCancel>
+
+            <AlertDialogAction
+              disabled={deletingDraft}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void onDeleteDraft();
+              }}
+            >
+              {deletingDraft && <Loader2 className="h-4 w-4 animate-spin" />}
+              Xác nhận xóa
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

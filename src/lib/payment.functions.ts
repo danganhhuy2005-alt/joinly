@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const createPaymentSchema = z.object({
+  renewQr: z.boolean().optional(),
   planCode: z.enum(["small", "standard", "pro", "monthly"]),
 
   // Small / Standard / Pro bắt buộc có eventId
@@ -70,7 +71,9 @@ export const createPayment = createServerFn({
               id,
               name,
               organizer_id,
-              plan_code
+              plan_code,
+              lifecycle_status,
+              requested_plan_code
             `,
         )
         .eq("id", data.eventId)
@@ -87,6 +90,10 @@ export const createPayment = createServerFn({
       // Chỉ Owner được mua/nâng gói cho event
       if (event.organizer_id !== context.userId) {
         throw new Error("Chỉ Owner của sự kiện mới có thể mua gói.");
+      }
+
+      if (event.lifecycle_status === "draft" && event.requested_plan_code !== plan.code) {
+        throw new Error("Gói thanh toán không khớp với bản nháp. Vui lòng kiểm tra lại.");
       }
     }
 
@@ -118,33 +125,95 @@ export const createPayment = createServerFn({
       expires_at: string | null;
     } | null = null;
 
-    // Retry vài lần nếu vô tình trùng order_code
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const number = randomInt(1_000_000_000, 10_000_000_000);
-
-      const orderCode = `JN${number}`;
-
-      const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-
-      const { data: payment, error: paymentError } = await supabaseAdmin
+    // Tìm đơn pending cũ của sự kiện
+    if (plan.billing_type === "event" && data.eventId) {
+      const { data: oldPayment, error: lookupError } = await supabaseAdmin
         .from("payments")
-        .insert({
-          user_id: context.userId,
+        .select("id, order_code, amount_vnd, plan_code, event_id, status, expires_at")
+        .eq("event_id", data.eventId)
+        .eq("status", "pending")
+        .maybeSingle();
 
-          event_id: plan.billing_type === "event" ? data.eventId! : null,
+      if (lookupError) throw lookupError;
 
-          plan_code: plan.code,
+      if (oldPayment) {
+        const stillValid =
+          oldPayment.expires_at !== null && new Date(oldPayment.expires_at).getTime() > Date.now();
 
-          order_code: orderCode,
+        if (stillValid) {
+          if (oldPayment.plan_code !== plan.code) {
+            throw new Error("Sự kiện đang có đơn thanh toán gói khác. Vui lòng hủy đơn cũ trước.");
+          }
 
-          amount_vnd: plan.price_vnd,
+          // Tái sử dụng đơn cũ
+          createdPayment = oldPayment;
+        } else {
+          // Đơn hết hạn, không tái sử dụng
+          const { error: expireError } = await supabaseAdmin
+            .from("payments")
+            .update({ status: "expired" })
+            .eq("id", oldPayment.id)
+            .eq("status", "pending");
 
-          status: "pending",
+          if (expireError) throw expireError;
+        }
+      }
+    }
 
-          expires_at: expiresAt,
-        })
-        .select(
-          `
+    if (data.renewQr === true) {
+      if (plan.billing_type !== "event" || !data.eventId) {
+        throw new Error("Chỉ có thể làm mới QR cho bản nháp sự kiện.");
+      }
+
+      const newOrderCode = `JN${randomInt(1_000_000_000, 10_000_000_000)}`;
+
+      const { data: newPayment, error: renewError } = await supabaseAdmin.rpc(
+        "replace_pending_payment",
+        {
+          p_event_id: data.eventId,
+          p_user_id: context.userId,
+          p_plan_code: plan.code,
+          p_order_code: newOrderCode,
+          p_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        },
+      );
+
+      if (renewError) throw renewError;
+      if (!newPayment) {
+        throw new Error("Không thể tạo lại mã QR thanh toán.");
+      }
+
+      createdPayment = newPayment as NonNullable<typeof createdPayment>;
+    }
+
+    // Retry vài lần nếu vô tình trùng order_code
+    if (!createdPayment) {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const number = randomInt(1_000_000_000, 10_000_000_000);
+
+        const orderCode = `JN${number}`;
+
+        const expiresAt = new Date(Date.now() + 1 * 60 * 1000).toISOString();
+
+        const { data: payment, error: paymentError } = await supabaseAdmin
+          .from("payments")
+          .insert({
+            user_id: context.userId,
+
+            event_id: plan.billing_type === "event" ? data.eventId! : null,
+
+            plan_code: plan.code,
+
+            order_code: orderCode,
+
+            amount_vnd: plan.price_vnd,
+
+            status: "pending",
+
+            expires_at: expiresAt,
+          })
+          .select(
+            `
               id,
               order_code,
               amount_vnd,
@@ -153,26 +222,61 @@ export const createPayment = createServerFn({
               status,
               expires_at
             `,
-        )
-        .single();
+          )
+          .single();
 
-      if (!paymentError && payment) {
-        createdPayment = payment;
+        if (!paymentError && payment) {
+          createdPayment = payment;
 
-        break;
+          break;
+        }
+
+        // 23505 = UNIQUE violation
+        // Nếu trùng order_code thì sinh mã khác
+        if (paymentError?.code === "23505") {
+          // Có thể trùng order_code hoặc đã có yêu cầu
+          // khác tạo payment cho cùng sự kiện.
+
+          if (plan.billing_type === "event" && data.eventId) {
+            const { data: existingPending, error: fetchError } = await supabaseAdmin
+              .from("payments")
+              .select("id, order_code, amount_vnd, plan_code, event_id, status, expires_at")
+              .eq("event_id", data.eventId)
+              .eq("status", "pending")
+              .maybeSingle();
+
+            if (fetchError) throw fetchError;
+
+            if (existingPending) {
+              if (existingPending.plan_code !== plan.code) {
+                throw new Error("Sự kiện đang có đơn thanh toán gói khác.");
+              }
+
+              const expiryMs = existingPending.expires_at
+                ? new Date(existingPending.expires_at).getTime()
+                : 0;
+
+              if (expiryMs <= Date.now()) {
+                throw new Error("Đơn thanh toán cũ vừa hết hạn. Vui lòng thử lại.");
+              }
+
+              // Dùng lại đơn vừa được yêu cầu khác tạo thành công
+              createdPayment = existingPending;
+              break;
+            }
+          }
+
+          // Không có đơn pending của event:
+          // Có thể chỉ trùng order_code, thử sinh mã mới.
+          continue;
+        }
+
+        throw paymentError;
       }
 
-      // 23505 = UNIQUE violation
-      // Nếu trùng order_code thì sinh mã khác
-      if (paymentError?.code === "23505") {
-        continue;
+      if (!createdPayment) {
+        throw new Error("Không thể tạo mã thanh toán. Vui lòng thử lại.");
       }
-
-      throw paymentError;
-    }
-
-    if (!createdPayment) {
-      throw new Error("Không thể tạo mã thanh toán. Vui lòng thử lại.");
     }
 
     // ==========================================
@@ -198,8 +302,8 @@ export const createPayment = createServerFn({
     qrUrl.searchParams.set("des", createdPayment.order_code);
 
     qrUrl.searchParams.set("template", "compact");
-    qrUrl.searchParams.set("showinfo", "true");
-    qrUrl.searchParams.set("fullacc", "true");
+    qrUrl.searchParams.set("showinfo", "false");
+    qrUrl.searchParams.set("fullacc", "false");
 
     if (accountHolder) {
       qrUrl.searchParams.set("holder", accountHolder);

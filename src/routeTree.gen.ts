@@ -16,6 +16,8 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AuthenticatedCreateEventRouteImport } from './routes/_authenticated/create-event'
 import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
+import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/plans'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as JoinIdRouteImport } from './routes/join.$id'
 import { Route as AuthenticatedCheckInIdRouteImport } from './routes/_authenticated/check-in.$id'
 import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
@@ -62,6 +64,16 @@ const AuthenticatedCreateEventRoute =
 const AuthenticatedMyEventsRoute = AuthenticatedMyEventsRouteImport.update({
   id: '/my-events',
   path: '/my-events',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPlansRoute = AuthenticatedPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const JoinIdRoute = JoinIdRouteImport.update({
@@ -137,6 +149,8 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
+  '/plans': typeof AuthenticatedPlansRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -157,6 +171,8 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
+  '/plans': typeof AuthenticatedPlansRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
@@ -178,6 +194,8 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/_authenticated/create-event': typeof AuthenticatedCreateEventRoute
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
+  '/_authenticated/plans': typeof AuthenticatedPlansRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/_authenticated/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -200,6 +218,8 @@ export interface FileRouteTypes {
     | '/terms'
     | '/create-event'
     | '/my-events'
+    | '/plans'
+    | '/profile'
     | '/join/$id'
     | '/check-in/$id'
     | '/dashboard/$id'
@@ -220,6 +240,8 @@ export interface FileRouteTypes {
     | '/terms'
     | '/create-event'
     | '/my-events'
+    | '/plans'
+    | '/profile'
     | '/check-in/$id'
     | '/dashboard/$id'
     | '/edit-event/$id'
@@ -240,6 +262,8 @@ export interface FileRouteTypes {
     | '/terms'
     | '/_authenticated/create-event'
     | '/_authenticated/my-events'
+    | '/_authenticated/plans'
+    | '/_authenticated/profile'
     | '/join/$id'
     | '/_authenticated/check-in/$id'
     | '/_authenticated/dashboard/$id'
@@ -313,6 +337,20 @@ declare module '@tanstack/react-router' {
       path: '/my-events'
       fullPath: '/my-events'
       preLoaderRoute: typeof AuthenticatedMyEventsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plans': {
+      id: '/_authenticated/plans'
+      path: '/plans'
+      fullPath: '/plans'
+      preLoaderRoute: typeof AuthenticatedPlansRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/join/$id': {
@@ -405,6 +443,8 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCreateEventRoute: typeof AuthenticatedCreateEventRoute
   AuthenticatedMyEventsRoute: typeof AuthenticatedMyEventsRoute
+  AuthenticatedPlansRoute: typeof AuthenticatedPlansRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedCheckInIdRoute: typeof AuthenticatedCheckInIdRoute
   AuthenticatedDashboardIdRoute: typeof AuthenticatedDashboardIdRoute
   AuthenticatedEditEventIdRoute: typeof AuthenticatedEditEventIdRoute
@@ -417,6 +457,8 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCreateEventRoute: AuthenticatedCreateEventRoute,
   AuthenticatedMyEventsRoute: AuthenticatedMyEventsRoute,
+  AuthenticatedPlansRoute: AuthenticatedPlansRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedCheckInIdRoute: AuthenticatedCheckInIdRoute,
   AuthenticatedDashboardIdRoute: AuthenticatedDashboardIdRoute,
   AuthenticatedEditEventIdRoute: AuthenticatedEditEventIdRoute,

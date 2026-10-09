@@ -1,5 +1,3 @@
-
-
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export type RegisterInput = {
@@ -17,15 +15,14 @@ export type RegisterResult =
   | { status: "invalid" }
   | { status: "wrong_code" }
   | { status: "duplicate" }
-  | { status: "not_allowed" };
+  | { status: "not_allowed" }
+  | { status: "full" }
+  | { status: "not_active" };
 
-export async function registerParticipantCore(
-  input: RegisterInput,
-): Promise<RegisterResult> {
+export async function registerParticipantCore(input: RegisterInput): Promise<RegisterResult> {
   // Chuẩn hóa dữ liệu
   const normalizedEmail = input.email.trim().toLowerCase();
-  const normalizedStudentId =
-    input.studentId?.trim().toUpperCase() || null;
+  const normalizedStudentId = input.studentId?.trim().toUpperCase() || null;
 
   const normalizedFullName = input.fullName.trim();
   const normalizedPhone = input.phone?.trim() || null;
@@ -53,9 +50,7 @@ export async function registerParticipantCore(
   const requiredCode = room.access_code;
 
   if (requiredCode) {
-    const provided = input.accessCode
-      ? input.accessCode.trim().toUpperCase()
-      : null;
+    const provided = input.accessCode ? input.accessCode.trim().toUpperCase() : null;
 
     if (!provided || provided !== requiredCode) {
       return { status: "wrong_code" };
@@ -66,12 +61,11 @@ export async function registerParticipantCore(
   // 3. Kiểm tra Allow-list
   // =========================
 
-  const { data: eventRow, error: eventErr } =
-    await supabaseAdmin
-      .from("events")
-      .select("allowlist_enabled, allowlist_scope")
-      .eq("id", input.eventId)
-      .maybeSingle();
+  const { data: eventRow, error: eventErr } = await supabaseAdmin
+    .from("events")
+    .select("allowlist_enabled, allowlist_scope")
+    .eq("id", input.eventId)
+    .maybeSingle();
 
   if (eventErr) throw eventErr;
 
@@ -101,74 +95,42 @@ export async function registerParticipantCore(
       return data ?? [];
     };
 
-    const emailCandidates = await findCandidates(
-      "email",
-      normalizedEmail,
-    );
+    const emailCandidates = await findCandidates("email", normalizedEmail);
 
     const studentCandidates = normalizedStudentId
-      ? await findCandidates(
-          "student_id",
-          normalizedStudentId,
-        )
+      ? await findCandidates("student_id", normalizedStudentId)
       : [];
 
-    const candidates = [
-      ...emailCandidates,
-      ...studentCandidates,
-    ];
+    const candidates = [...emailCandidates, ...studentCandidates];
 
-    const candidatesInScope = candidates.filter(
-      (entry) => {
-        // Nếu chọn Allow-list toàn sự kiện:
-        // người ở bất kỳ phòng nào cũng được tính.
-        if (
-          eventRow.allowlist_scope ===
-          "event"
-        ) {
-          return true;
-        }
+    const candidatesInScope = candidates.filter((entry) => {
+      // Nếu chọn Allow-list toàn sự kiện:
+      // người ở bất kỳ phòng nào cũng được tính.
+      if (eventRow.allowlist_scope === "event") {
+        return true;
+      }
 
-        // Nếu chọn Allow-list theo phòng:
-        // nhận người chung toàn sự kiện
-        // + người thuộc đúng phòng hiện tại.
-        return (
-          entry.room_id === null ||
-          entry.room_id === input.roomId
-        );
-      },
-    );
+      // Nếu chọn Allow-list theo phòng:
+      // nhận người chung toàn sự kiện
+      // + người thuộc đúng phòng hiện tại.
+      return entry.room_id === null || entry.room_id === input.roomId;
+    });
 
-    const isAllowed =
-      candidatesInScope.some((entry) => {
-        if (
-          entry.email &&
-          entry.student_id
-        ) {
-          return (
-            entry.email ===
-              normalizedEmail &&
-            entry.student_id ===
-              normalizedStudentId
-          );
-        }
+    const isAllowed = candidatesInScope.some((entry) => {
+      if (entry.email && entry.student_id) {
+        return entry.email === normalizedEmail && entry.student_id === normalizedStudentId;
+      }
 
-        if (entry.email) {
-          return (
-            entry.email ===
-            normalizedEmail
-          );
-        }
+      if (entry.email) {
+        return entry.email === normalizedEmail;
+      }
 
-        if (entry.student_id) {
-          return (
-            entry.student_id ===
-            normalizedStudentId
-          );
-        }
+      if (entry.student_id) {
+        return entry.student_id === normalizedStudentId;
+      }
 
-        return false;
-      });
+      return false;
+    });
 
     if (!isAllowed) {
       return {
@@ -183,10 +145,7 @@ export async function registerParticipantCore(
 
   // Kiểm tra Email đã đăng ký
   // trong phòng này chưa
-  const {
-    data: existingEmail,
-    error: emailExistErr,
-  } = await supabaseAdmin
+  const { data: existingEmail, error: emailExistErr } = await supabaseAdmin
     .from("participants")
     .select("id")
     .eq("event_id", input.eventId)
@@ -194,8 +153,7 @@ export async function registerParticipantCore(
     .ilike("email", normalizedEmail)
     .maybeSingle();
 
-  if (emailExistErr)
-    throw emailExistErr;
+  if (emailExistErr) throw emailExistErr;
 
   if (existingEmail) {
     return { status: "duplicate" };
@@ -204,22 +162,15 @@ export async function registerParticipantCore(
   // Nếu có MSSV thì kiểm tra MSSV
   // đã được dùng trong phòng này chưa
   if (normalizedStudentId) {
-    const {
-      data: existingStudent,
-      error: studentExistErr,
-    } = await supabaseAdmin
+    const { data: existingStudent, error: studentExistErr } = await supabaseAdmin
       .from("participants")
       .select("id")
       .eq("event_id", input.eventId)
       .eq("room_id", input.roomId)
-      .ilike(
-        "student_id",
-        normalizedStudentId,
-      )
+      .ilike("student_id", normalizedStudentId)
       .maybeSingle();
 
-    if (studentExistErr)
-      throw studentExistErr;
+    if (studentExistErr) throw studentExistErr;
 
     if (existingStudent) {
       return {
@@ -232,26 +183,33 @@ export async function registerParticipantCore(
   // 5. Tạo participant
   // =========================
 
-  const { data: inserted, error } =
-    await supabaseAdmin
-      .from("participants")
-      .insert({
-        event_id: input.eventId,
-        room_id: input.roomId,
-        full_name: normalizedFullName,
-        email: normalizedEmail,
-        phone: normalizedPhone,
-        student_id:
-          normalizedStudentId,
-      })
-      .select("confirmation_token")
-      .single();
+  const { data: inserted, error } = await supabaseAdmin
+    .from("participants")
+    .insert({
+      event_id: input.eventId,
+      room_id: input.roomId,
+      full_name: normalizedFullName,
+      email: normalizedEmail,
+      phone: normalizedPhone,
+      student_id: normalizedStudentId,
+    })
+    .select("confirmation_token")
+    .single();
 
   if (error) {
+    // Sự kiện đã đủ số lượng
+    if (error.message?.includes("Sự kiện đã đạt giới hạn")) {
+      return { status: "full" };
+    }
+
+    // Sự kiện vẫn là bản nháp
+    if (error.message?.includes("Sự kiện chưa được kích hoạt")) {
+      return { status: "not_active" };
+    }
+
+    // Người tham gia bị trùng
     if (error.code === "23505") {
-      return {
-        status: "duplicate",
-      };
+      return { status: "duplicate" };
     }
 
     throw error;
@@ -259,7 +217,6 @@ export async function registerParticipantCore(
 
   return {
     status: "ok",
-    token:
-      inserted.confirmation_token,
+    token: inserted.confirmation_token,
   };
 }

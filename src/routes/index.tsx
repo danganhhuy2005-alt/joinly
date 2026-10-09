@@ -2,7 +2,18 @@ import { useEffect, type ReactNode, useState } from "react";
 
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
-import { ArrowRight, BarChart3, CalendarPlus, QrCode, Sparkles, Users } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  CalendarPlus,
+  Crown,
+  QrCode,
+  Sparkles,
+  Users,
+  ShieldCheck,
+  DoorOpen,
+  FileDown,
+} from "lucide-react";
 
 import { AuthModal } from "@/components/AuthModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -94,6 +105,8 @@ function Landing() {
 
           <HowItWorks />
 
+          <Pricing onCreateEvent={openCreateEventModal} />
+
           <CTA
             loggedIn={false}
             loading={false}
@@ -129,6 +142,10 @@ function Header({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps)
 
           <a href="#cach-hoat-dong" className="transition-colors hover:text-foreground">
             Cách hoạt động
+          </a>
+
+          <a href="#bang-gia" className="transition-colors hover:text-foreground">
+            Bảng giá
           </a>
 
           <a href="#lien-he" className="transition-colors hover:text-foreground">
@@ -187,7 +204,7 @@ function Header({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps)
 
 function Logo() {
   return (
-    <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-[var(--shadow-soft)]">
+    <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-var(--shadow-soft)">
       <Sparkles className="h-4 w-4" strokeWidth={2.5} />
     </span>
   );
@@ -204,18 +221,18 @@ function Hero({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps) {
       <div className="mx-auto max-w-6xl px-6 py-24 md:py-32">
         <div className="mx-auto max-w-3xl text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-4 py-1.5 text-xs font-medium text-primary backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-            Dành cho mọi ban tổ chức sự kiện
+            <Sparkles className="h-3.5 w-3.5" />
+            Nền tảng quản lý sự kiện dành cho ban tổ chức
           </span>
 
           <h1 className="mt-6 font-display text-5xl font-extrabold leading-[1.05] tracking-tight text-foreground md:text-6xl lg:text-7xl">
-            Tổ chức sự kiện,{" "}
-            <span className="whitespace-pre-line text-primary">{"\n"}gọn nhẹ trong một nơi</span>
+            Quản lý sự kiện
+            <span className="block text-primary">dễ dàng hơn với Joinly</span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
-            Joinly giúp bạn tạo sự kiện, để người tham gia join phòng bằng QR, quản lý danh sách và
-            xem dữ liệu trên một dashboard duy nhất.
+            Tạo sự kiện, kiểm soát người tham gia bằng Allow-list, check-in bằng QR, quản lý đội ngũ
+            và theo dõi dữ liệu trong một nền tảng duy nhất.
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -283,8 +300,7 @@ function Hero({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps) {
           </div>
 
           <p className="mt-6 text-sm text-muted-foreground">
-            Phù hợp với CLB, trường học, trung tâm đào tạo, doanh nghiệp, workshop, hội thảo, hội
-            nghị, đám cưới và sự kiện cộng đồng.
+            Bắt đầu miễn phí với tối đa 50 người tham dự · Không cần thẻ thanh toán
           </p>
         </div>
 
@@ -303,7 +319,7 @@ function HeroPreview() {
           boxShadow: "var(--shadow-elegant)",
         }}
       >
-        <div className="rounded-xl bg-gradient-to-br from-primary-soft to-background p-8">
+        <div className="rounded-xl bg-linear-to-br from-primary-soft to-background p-8">
           <div className="grid gap-4 md:grid-cols-2">
             <PreviewCard
               icon={<CalendarPlus className="h-5 w-5" />}
@@ -367,63 +383,79 @@ function PreviewCard({
 }
 
 function Features() {
-  const items = [
+  const features = [
     {
-      icon: <CalendarPlus className="h-6 w-6" />,
-
-      title: "Tạo sự kiện nhanh",
-
-      desc: "Đặt tên, thời gian, địa điểm và các phòng tham gia. Dùng được cho workshop, hội thảo, lớp học, đám cưới hay sự kiện nội bộ.",
+      icon: QrCode,
+      title: "QR Check-in / Check-out",
+      description: "Check-in và check-out nhanh bằng QR, lưu thời gian và người thực hiện.",
     },
-
     {
-      icon: <QrCode className="h-6 w-6" />,
-
-      title: "QR tham gia phòng",
-
-      desc: "Mỗi phòng có một mã QR riêng. Người tham gia quét QR, điền form và được ghi nhận vào đúng phòng.",
+      icon: ShieldCheck,
+      title: "Allow-list",
+      description: "Kiểm soát người được phép tham gia toàn sự kiện hoặc từng phòng.",
     },
-
     {
-      icon: <BarChart3 className="h-6 w-6" />,
-
-      title: "Dashboard dữ liệu",
-
-      desc: "Xem số người tham gia theo từng phòng, tìm kiếm danh sách và xuất file CSV khi cần.",
+      icon: BarChart3,
+      title: "Dashboard realtime",
+      description:
+        "Theo dõi đăng ký, check-in, check-out và trạng thái người tham dự theo thời gian thực.",
+    },
+    {
+      icon: Users,
+      title: "Đội ngũ quản lý",
+      description: "Phân quyền Owner, Co-owner và Manager để cùng vận hành sự kiện an toàn.",
+    },
+    {
+      icon: DoorOpen,
+      title: "Quản lý nhiều phòng",
+      description:
+        "Tạo nhiều phòng trong cùng một sự kiện và quản lý người tham gia theo từng phòng.",
+    },
+    {
+      icon: FileDown,
+      title: "Export CSV",
+      description: "Xuất danh sách người tham dự và dữ liệu check-in/out để tổng hợp sau sự kiện.",
     },
   ];
 
   return (
     <section id="tinh-nang" className="mx-auto max-w-6xl px-6 py-24">
       <div className="mx-auto max-w-2xl text-center">
-        <h2 className="font-display text-4xl font-bold tracking-tight md:text-5xl">
-          Những gì Joinly làm
+        <span className="text-sm font-semibold uppercase tracking-wider text-primary">
+          Mọi thứ bạn cần
+        </span>
+
+        <h2 className="mt-3 font-display text-4xl font-bold tracking-tight md:text-5xl">
+          Quản lý sự kiện trong một nền tảng
         </h2>
 
         <p className="mt-4 text-lg text-muted-foreground">
-          Bốn việc cơ bản cho một sự kiện: tạo sự kiện, mở phòng QR, thu thông tin người tham gia,
-          xem dữ liệu.
+          Từ kiểm soát người tham gia đến check-in và theo dõi dữ liệu, Joinly giúp ban tổ chức vận
+          hành sự kiện gọn gàng hơn.
         </p>
       </div>
 
-      <div className="mt-16 grid gap-6 md:grid-cols-3">
-        {items.map((feature) => (
-          <div
-            key={feature.title}
-            className="group rounded-2xl border border-border bg-card p-7 transition-all hover:-translate-y-1 hover:border-primary/30"
-            style={{
-              boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
-            }}
-          >
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-              {feature.icon}
+      <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {features.map((feature) => {
+          const Icon = feature.icon;
+
+          return (
+            <div
+              key={feature.title}
+              className="group rounded-2xl border border-border bg-card p-6 shadow-sm transition hover:-translate-y-1 hover:border-primary/40 hover:shadow-md"
+            >
+              <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 transition group-hover:bg-primary">
+                <Icon className="h-5 w-5 text-primary transition group-hover:text-primary-foreground" />
+              </div>
+
+              <h3 className="mt-5 text-lg font-semibold">{feature.title}</h3>
+
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                {feature.description}
+              </p>
             </div>
-
-            <h3 className="mt-5 text-xl font-semibold">{feature.title}</h3>
-
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{feature.desc}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -432,54 +464,195 @@ function Features() {
 function HowItWorks() {
   const steps = [
     {
-      n: "01",
-
+      number: "01",
+      icon: CalendarPlus,
       title: "Tạo sự kiện",
-
-      desc: "Đăng nhập, tạo sự kiện và thêm các phòng tham gia bạn cần.",
+      description: "Thiết lập tên sự kiện, thời gian, địa điểm, phòng và các tùy chọn quản lý.",
     },
-
     {
-      n: "02",
-
-      title: "Chia sẻ QR",
-
-      desc: "Mỗi phòng có một mã QR riêng. In ra hoặc chiếu lên màn hình tại sự kiện.",
+      number: "02",
+      icon: Users,
+      title: "Mời người tham gia",
+      description: "Mở đăng ký, sử dụng Allow-list khi cần và quản lý danh sách người tham dự.",
     },
-
     {
-      n: "03",
-
-      title: "Xem dữ liệu",
-
-      desc: "Theo dõi danh sách người tham gia theo từng phòng và xuất CSV khi cần.",
+      number: "03",
+      icon: QrCode,
+      title: "Check-in & theo dõi",
+      description:
+        "Check-in bằng QR và theo dõi dữ liệu người tham dự trên Dashboard theo thời gian thực.",
     },
   ];
 
   return (
-    <section id="cach-hoat-dong" className="border-y border-border bg-secondary/50">
+    <section id="cach-hoat-dong" className="border-y border-border bg-card/40">
       <div className="mx-auto max-w-6xl px-6 py-24">
+        {/* HEADER */}
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="font-display text-4xl font-bold tracking-tight md:text-5xl">
-            Ba bước để bắt đầu
+          <span className="text-sm font-semibold uppercase tracking-wider text-primary">
+            Cách hoạt động
+          </span>
+
+          <h2 className="mt-3 font-display text-4xl font-bold tracking-tight md:text-5xl">
+            Bắt đầu chỉ với 3 bước
           </h2>
 
           <p className="mt-4 text-lg text-muted-foreground">
-            Không cần kỹ năng kỹ thuật. Dùng được cho mọi loại sự kiện.
+            Từ lúc tạo sự kiện đến khi check-in, Joinly giúp bạn quản lý toàn bộ quy trình trong một
+            nơi.
           </p>
         </div>
 
-        <div className="mt-16 grid gap-8 md:grid-cols-3">
-          {steps.map((step) => (
-            <div key={step.n} className="relative">
-              <div className="font-display text-6xl font-extrabold text-primary">{step.n}</div>
+        {/* STEPS */}
+        <div className="relative mt-14 grid gap-6 md:grid-cols-3">
+          {/* CONNECTING LINE - DESKTOP */}
+          <div className="absolute left-[16%] right-[16%] top-10 hidden h-px bg-border md:block" />
 
-              <h3 className="mt-2 text-xl font-semibold">{step.title}</h3>
+          {steps.map((step) => {
+            const Icon = step.icon;
 
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{step.desc}</p>
-            </div>
-          ))}
+            return (
+              <div key={step.number} className="relative text-center">
+                {/* ICON */}
+                <div className="relative z-10 mx-auto grid h-20 w-20 place-items-center rounded-2xl border border-border bg-background shadow-sm">
+                  <Icon className="h-7 w-7 text-primary" />
+
+                  <span className="absolute -right-2 -top-2 grid h-7 w-7 place-items-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                    {step.number}
+                  </span>
+                </div>
+
+                {/* CONTENT */}
+                <h3 className="mt-6 text-lg font-semibold">{step.title}</h3>
+
+                <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground">
+                  {step.description}
+                </p>
+              </div>
+            );
+          })}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function Pricing({ onCreateEvent }: { onCreateEvent: () => void }) {
+  const plans = [
+    {
+      name: "Free",
+      price: "0đ",
+      suffix: "",
+      limit: "Tối đa 50 người",
+      description: "Dành cho sự kiện nhỏ.",
+      popular: false,
+    },
+    {
+      name: "Small",
+      price: "50.000đ",
+      suffix: "/ sự kiện",
+      limit: "Tối đa 100 người",
+      description: "Workshop và CLB nhỏ.",
+      popular: false,
+    },
+    {
+      name: "Standard",
+      price: "88.000đ",
+      suffix: "/ sự kiện",
+      limit: "Tối đa 300 người",
+      description: "Seminar và sự kiện vừa.",
+      popular: true,
+    },
+    {
+      name: "Pro",
+      price: "199.000đ",
+      suffix: "/ sự kiện",
+      limit: "Tối đa 700 người",
+      description: "Sự kiện quy mô lớn.",
+      popular: false,
+    },
+  ];
+
+  return (
+    <section id="bang-gia" className="mx-auto max-w-6xl px-6 py-24">
+      <div className="mx-auto max-w-2xl text-center">
+        <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10">
+          <Crown className="h-6 w-6 text-primary" />
+        </div>
+
+        <h2 className="mt-5 font-display text-4xl font-bold tracking-tight md:text-5xl">
+          Bảng giá đơn giản
+        </h2>
+
+        <p className="mt-4 text-lg text-muted-foreground">
+          Bắt đầu miễn phí và chỉ nâng cấp khi sự kiện của bạn lớn hơn.
+        </p>
+      </div>
+
+      <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {plans.map((plan) => (
+          <div
+            key={plan.name}
+            className={`relative flex flex-col rounded-2xl bg-card p-6 ${
+              plan.popular ? "border-2 border-primary shadow-md" : "border border-border shadow-sm"
+            }`}
+          >
+            {plan.popular && (
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+                Phổ biến
+              </span>
+            )}
+
+            <p className={plan.popular ? "font-semibold text-primary" : "font-semibold"}>
+              {plan.name}
+            </p>
+
+            <div className="mt-3 flex items-end gap-1">
+              <span className="text-3xl font-bold">{plan.price}</span>
+
+              {plan.suffix && (
+                <span className="pb-1 text-xs text-muted-foreground">{plan.suffix}</span>
+              )}
+            </div>
+
+            <p className="mt-3 font-medium">{plan.limit}</p>
+
+            <p className="mt-1 flex-1 text-sm text-muted-foreground">{plan.description}</p>
+
+            <button
+              type="button"
+              onClick={onCreateEvent}
+              className={`mt-6 inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold transition ${
+                plan.popular
+                  ? "bg-primary text-primary-foreground hover:opacity-90"
+                  : "border border-border hover:bg-accent"
+              }`}
+            >
+              {plan.name === "Free" ? "Bắt đầu miễn phí" : `Chọn ${plan.name}`}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-primary/30 bg-primary/5 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="flex items-center gap-2 font-semibold">
+            <Crown className="h-4 w-4 text-primary" />
+            Monthly
+          </p>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            150.000đ / 30 ngày · Tối đa 3 sự kiện
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onCreateEvent}
+          className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+        >
+          Bắt đầu với Joinly
+        </button>
       </div>
     </section>
   );

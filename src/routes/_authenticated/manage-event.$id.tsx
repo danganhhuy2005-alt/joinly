@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -12,8 +13,18 @@ import {
   Shield,
   Trash2,
   Users,
+  CreditCard,
+  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { createPayment } from "@/lib/payment.functions";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -34,10 +45,16 @@ export const Route = createFileRoute("/_authenticated/manage-event/$id")({
 type EventRow = {
   id: string;
   name: string;
+  organizer_id: string;
   location: string | null;
   starts_at: string | null;
   allowlist_enabled: boolean;
   allowlist_scope: "event" | "room";
+  plan_code: string;
+  attendee_limit: number;
+  lifecycle_status: "draft" | "active";
+  requested_plan_code: string | null;
+  expected_attendees: number | null;
 };
 
 type Room = {
@@ -76,6 +93,29 @@ function ManageEvent() {
 
   const [deletingEvent, setDeletingEvent] = useState(false);
 
+  const createPaymentFn = useServerFn(createPayment);
+
+  const [billingOpen, setBillingOpen] = useState(false);
+
+  const [creatingPayment, setCreatingPayment] = useState(false);
+
+  const [resumingPayment, setResumingPayment] = useState(false);
+
+  const [paymentResult, setPaymentResult] = useState<{
+    id: string;
+    planCode: string;
+    amountVnd: number;
+    orderCode: string;
+    eventId: string | null;
+    expiresAt: string | null;
+    qrUrl: string;
+    bank: {
+      bankCode: string;
+      accountNumber: string;
+      accountHolder: string;
+    };
+  } | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
 
@@ -83,7 +123,9 @@ function ManageEvent() {
       { data: ev, error: eventError },
       { data: rms, error: roomsError },
       { data: allowed, error: allowlistError },
-      currentRole,
+      {
+        data: { user },
+      },
     ] = await Promise.all([
       supabase
         .from("events")
@@ -91,10 +133,16 @@ function ManageEvent() {
           `
             id,
             name,
+            organizer_id,
             location,
             starts_at,
             allowlist_enabled,
-            allowlist_scope
+            allowlist_scope,
+            plan_code,
+            attendee_limit,
+            lifecycle_status,
+            requested_plan_code,
+            expected_attendees
           `,
         )
         .eq("id", id)
@@ -117,8 +165,7 @@ function ManageEvent() {
         .order("created_at", {
           ascending: false,
         }),
-
-      getEventRole(id),
+      supabase.auth.getUser(),
     ]);
 
     if (eventError) {
@@ -133,8 +180,39 @@ function ManageEvent() {
       console.error(allowlistError);
     }
 
-    setEvent(ev as EventRow | null);
-    setRole(currentRole);
+    const loadedEvent = ev as EventRow | null;
+
+    setEvent(loadedEvent);
+
+    let resolvedRole: EventRole = null;
+
+    if (loadedEvent && user) {
+      // Owner xác định trực tiếp bằng organizer_id
+      if (loadedEvent.organizer_id === user.id) {
+        resolvedRole = "owner";
+      } else {
+        // Co-owner / Manager mới cần RPC
+        resolvedRole = await getEventRole(id);
+      }
+    }
+
+    setRole(resolvedRole);
+
+    console.log(
+      "JOINLY EVENT ACCESS:",
+      JSON.stringify(
+        {
+          eventId: id,
+          event: loadedEvent,
+          currentUserId: user?.id,
+          organizerId: loadedEvent?.organizer_id,
+          resolvedRole,
+          eventError,
+        },
+        null,
+        2,
+      ),
+    );
 
     const loadedRooms = (rms as Room[] | null) ?? [];
 
@@ -165,7 +243,6 @@ function ManageEvent() {
     const { error } = await supabase.rpc("update_event_allowlist_settings", {
       _event_id: id,
       _enabled: enabled,
-      _scope: null,
     });
 
     setUpdatingAllowlist(false);
@@ -201,7 +278,6 @@ function ManageEvent() {
 
     const { error } = await supabase.rpc("update_event_allowlist_settings", {
       _event_id: id,
-      _enabled: null,
       _scope: scope,
     });
 
@@ -265,6 +341,59 @@ function ManageEvent() {
     });
   };
 
+  const resumeDraftPayment = async () => {
+    if (!event || resumingPayment) return;
+
+    const planCode = event.requested_plan_code;
+
+    if (planCode !== "small" && planCode !== "standard" && planCode !== "pro") {
+      toast.error("Gói thanh toán không hợp lệ.");
+      return;
+    }
+
+    setResumingPayment(true);
+
+    try {
+      await createPaymentFn({
+        data: {
+          planCode,
+          eventId: event.id,
+          renewQr: true,
+        },
+      });
+
+      await navigate({
+        to: "/create-event",
+        search: { resumeId: event.id },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể tạo mã thanh toán mới.");
+    } finally {
+      setResumingPayment(false);
+    }
+  };
+
+  const buyPlan = async (planCode: "small" | "standard" | "pro") => {
+    setCreatingPayment(true);
+
+    try {
+      const result = await createPaymentFn({
+        data: {
+          planCode,
+          eventId: id,
+        },
+      });
+
+      setPaymentResult(result);
+    } catch (error) {
+      console.error(error);
+
+      toast.error(error instanceof Error ? error.message : "Không thể tạo đơn thanh toán.");
+    } finally {
+      setCreatingPayment(false);
+    }
+  };
+
   const visibleAllowlist = allowlist.filter((person) => {
     // Toàn sự kiện:
     // hiển thị tất cả người, kể cả người thuộc từng phòng
@@ -303,6 +432,73 @@ function ManageEvent() {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground">
         Bạn không có quyền quản lý sự kiện này.
+      </div>
+    );
+  }
+  if (event.lifecycle_status === "draft") {
+    return (
+      <div className="min-h-screen bg-secondary/30 px-4 py-12">
+        <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <div className="mb-4 text-center">
+            <h1 className="text-2xl font-bold">Sự kiện chưa được kích hoạt</h1>
+
+            <p className="mt-2 text-sm text-muted-foreground">
+              Hoàn tất thanh toán để bắt đầu tổ chức sự kiện.
+            </p>
+          </div>
+
+          <div className="space-y-3 rounded-xl bg-secondary/50 p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Tên sự kiện</p>
+              <p className="font-semibold">{event.name}</p>
+            </div>
+
+            <div>
+              <p className="text-xs text-muted-foreground">Gói đang chờ kích hoạt</p>
+              <p className="font-semibold uppercase">{event.requested_plan_code ?? "Chưa chọn"}</p>
+            </div>
+
+            <div>
+              <p className="text-xs text-muted-foreground">Số người dự kiến</p>
+              <p className="font-semibold">{event.expected_attendees ?? 0} người</p>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            <Button
+              type="button"
+              className="w-full"
+              disabled={resumingPayment}
+              onClick={() => void resumeDraftPayment()}
+            >
+              {resumingPayment ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <QrCode className="h-4 w-4" />
+              )}
+
+              {resumingPayment ? "Đang tạo mã QR mới..." : "Tiếp tục thanh toán"}
+            </Button>
+
+            <Button asChild className="w-full">
+              <Link to="/edit-event/$id" params={{ id: event.id }}>
+                <Pencil className="h-4 w-4" />
+                Chỉnh sửa bản nháp
+              </Link>
+            </Button>
+
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/my-events">
+                <ArrowLeft className="h-4 w-4" />
+                Quay về sự kiện của tôi
+              </Link>
+            </Button>
+          </div>
+
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            Bản nháp chưa được công bố và chưa thể nhận đăng ký.
+          </p>
+        </div>
       </div>
     );
   }
@@ -353,6 +549,29 @@ function ManageEvent() {
               <DoorOpen className="h-4 w-4" />
               {rooms.length} phòng
             </div>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-sm">
+              <Crown className="h-4 w-4 text-primary" />
+
+              <span className="font-medium">Gói {event.plan_code.toUpperCase()}</span>
+
+              <span className="text-muted-foreground">• tối đa {event.attendee_limit} người</span>
+            </div>
+
+            {role === "owner" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setPaymentResult(null);
+                  setBillingOpen(true);
+                }}
+              >
+                <CreditCard className="h-4 w-4" />
+                Nâng cấp gói
+              </Button>
+            )}
           </div>
         </div>
 
@@ -531,6 +750,119 @@ function ManageEvent() {
           </div>
         </div>
       </div>
+      <Dialog
+        open={billingOpen}
+        onOpenChange={(open) => {
+          setBillingOpen(open);
+
+          if (!open) {
+            setPaymentResult(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Nâng cấp sự kiện</DialogTitle>
+
+            <DialogDescription>Chọn gói phù hợp với số lượng người tham dự.</DialogDescription>
+          </DialogHeader>
+
+          {!paymentResult ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <button
+                type="button"
+                disabled={creatingPayment}
+                onClick={() => void buyPlan("small")}
+                className="rounded-xl border border-border p-4 text-left transition hover:border-primary hover:bg-secondary/50"
+              >
+                <p className="font-semibold">Small</p>
+
+                <p className="mt-1 text-2xl font-bold">50.000đ</p>
+
+                <p className="mt-2 text-sm text-muted-foreground">Tối đa 100 người</p>
+              </button>
+
+              <button
+                type="button"
+                disabled={creatingPayment}
+                onClick={() => void buyPlan("standard")}
+                className="rounded-xl border border-primary bg-primary/5 p-4 text-left transition hover:bg-primary/10"
+              >
+                <p className="font-semibold">Standard</p>
+
+                <p className="mt-1 text-2xl font-bold">88.000đ</p>
+
+                <p className="mt-2 text-sm text-muted-foreground">Tối đa 300 người</p>
+              </button>
+
+              <button
+                type="button"
+                disabled={creatingPayment}
+                onClick={() => void buyPlan("pro")}
+                className="rounded-xl border border-border p-4 text-left transition hover:border-primary hover:bg-secondary/50"
+              >
+                <p className="font-semibold">Pro</p>
+
+                <p className="mt-1 text-2xl font-bold">199.000đ</p>
+
+                <p className="mt-2 text-sm text-muted-foreground">Tối đa 700 người</p>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="flex justify-center">
+                <div className="rounded-2xl border border-border bg-white p-4">
+                  <img
+                    src={paymentResult.qrUrl}
+                    alt="QR thanh toán TPBank"
+                    className="h-72 w-72 object-contain"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-secondary/30 p-4">
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Ngân hàng</span>
+
+                    <strong>{paymentResult.bank.bankCode}</strong>
+                  </div>
+
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Số tài khoản</span>
+
+                    <strong>{paymentResult.bank.accountNumber}</strong>
+                  </div>
+
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Số tiền</span>
+
+                    <strong>{paymentResult.amountVnd.toLocaleString("vi-VN")}đ</strong>
+                  </div>
+
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Nội dung</span>
+
+                    <strong className="font-mono">{paymentResult.orderCode}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-center text-sm text-muted-foreground">
+                Quét QR bằng ứng dụng ngân hàng. Sau khi SePay xác nhận, Joinly sẽ tự động nâng cấp
+                sự kiện.
+              </p>
+            </div>
+          )}
+
+          {creatingPayment && (
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Đang tạo mã thanh toán...
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

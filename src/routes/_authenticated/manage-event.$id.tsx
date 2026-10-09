@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cancelEventPayment, createPayment } from "@/lib/payment.functions";
+import { PaymentQrDownloadButton } from "@/components/PaymentQrDownloadButton";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -289,7 +290,9 @@ function ManageEvent() {
     };
 
     void restoreOldOrder();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [billingOpen, event?.id, id, role]);
 
   useEffect(() => {
@@ -311,7 +314,9 @@ function ManageEvent() {
   const closeBilling = async () => {
     if (cancellingPayment) return;
     if (creatingPayment || checkingOldOrder) {
-      toast.error("Đang kiểm tra/tạo đơn thanh toán, vui lòng hoàn tất thao tác này trước khi đóng.");
+      toast.error(
+        "Đang kiểm tra/tạo đơn thanh toán, vui lòng hoàn tất thao tác này trước khi đóng.",
+      );
       return;
     }
 
@@ -888,7 +893,8 @@ function ManageEvent() {
 
             <DialogDescription>
               Chọn gói phù hợp với số lượng người tham dự.
-              {event?.plan_code !== "free" && " Chỉ thanh toán phần chênh lệch; số tiền chính xác sẽ hiện trên QR."}
+              {event?.plan_code !== "free" &&
+                " Chỉ thanh toán phần chênh lệch; số tiền chính xác sẽ hiện trên QR."}
             </DialogDescription>
           </DialogHeader>
 
@@ -906,44 +912,52 @@ function ManageEvent() {
             </div>
           ) : !paymentResult ? (
             <div className="grid gap-3 sm:grid-cols-3">
-              {event.plan_code === "free" && <button
-                type="button"
-                disabled={creatingPayment}
-                onClick={() => void buyPlan("small")}
-                className="rounded-xl border border-border p-4 text-left transition hover:border-primary hover:bg-secondary/50"
-              >
-                <p className="font-semibold">Small</p>
+              {event.plan_code === "free" && (
+                <button
+                  type="button"
+                  disabled={creatingPayment}
+                  onClick={() => void buyPlan("small")}
+                  className="rounded-xl border border-border p-4 text-left transition hover:border-primary hover:bg-secondary/50"
+                >
+                  <p className="font-semibold">Small</p>
 
-                <p className="mt-1 text-2xl font-bold">50.000đ</p>
+                  <p className="mt-1 text-2xl font-bold">50.000đ</p>
 
-                <p className="mt-2 text-sm text-muted-foreground">Tối đa 100 người</p>
-              </button>}
+                  <p className="mt-2 text-sm text-muted-foreground">Tối đa 100 người</p>
+                </button>
+              )}
 
-              {(event.plan_code === "free" || event.plan_code === "small") && <button
-                type="button"
-                disabled={creatingPayment}
-                onClick={() => void buyPlan("standard")}
-                className="rounded-xl border border-primary bg-primary/5 p-4 text-left transition hover:bg-primary/10"
-              >
-                <p className="font-semibold">Standard</p>
+              {(event.plan_code === "free" || event.plan_code === "small") && (
+                <button
+                  type="button"
+                  disabled={creatingPayment}
+                  onClick={() => void buyPlan("standard")}
+                  className="rounded-xl border border-primary bg-primary/5 p-4 text-left transition hover:bg-primary/10"
+                >
+                  <p className="font-semibold">Standard</p>
 
-                <p className="mt-1 text-2xl font-bold">88.000đ</p>
+                  <p className="mt-1 text-2xl font-bold">88.000đ</p>
 
-                <p className="mt-2 text-sm text-muted-foreground">Tối đa 300 người</p>
-              </button>}
+                  <p className="mt-2 text-sm text-muted-foreground">Tối đa 300 người</p>
+                </button>
+              )}
 
-              {(event.plan_code === "free" || event.plan_code === "small" || event.plan_code === "standard") && <button
-                type="button"
-                disabled={creatingPayment}
-                onClick={() => void buyPlan("pro")}
-                className="rounded-xl border border-border p-4 text-left transition hover:border-primary hover:bg-secondary/50"
-              >
-                <p className="font-semibold">Pro</p>
+              {(event.plan_code === "free" ||
+                event.plan_code === "small" ||
+                event.plan_code === "standard") && (
+                <button
+                  type="button"
+                  disabled={creatingPayment}
+                  onClick={() => void buyPlan("pro")}
+                  className="rounded-xl border border-border p-4 text-left transition hover:border-primary hover:bg-secondary/50"
+                >
+                  <p className="font-semibold">Pro</p>
 
-                <p className="mt-1 text-2xl font-bold">199.000đ</p>
+                  <p className="mt-1 text-2xl font-bold">199.000đ</p>
 
-                <p className="mt-2 text-sm text-muted-foreground">Tối đa 700 người</p>
-              </button>}
+                  <p className="mt-2 text-sm text-muted-foreground">Tối đa 700 người</p>
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-5">
@@ -954,11 +968,18 @@ function ManageEvent() {
               )}
               <div className="rounded-xl border border-border bg-secondary/30 p-3 text-center text-sm">
                 <div className="font-medium">Thời gian thanh toán còn lại</div>
-                <div className={paymentExpired ? "mt-1 text-2xl font-bold text-destructive" : "mt-1 text-2xl font-bold text-primary"}>
+                <div
+                  className={
+                    paymentExpired
+                      ? "mt-1 text-2xl font-bold text-destructive"
+                      : "mt-1 text-2xl font-bold text-primary"
+                  }
+                >
                   {paymentExpired ? "Đã hết hạn" : remainingTimeLabel}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Hạn thanh toán: {paymentResult.expiresAt
+                  Hạn thanh toán:{" "}
+                  {paymentResult.expiresAt
                     ? new Date(paymentResult.expiresAt).toLocaleString("vi-VN")
                     : "Không xác định"}
                 </p>
@@ -968,66 +989,101 @@ function ManageEvent() {
                   Đơn đã hết hạn. Không chuyển tiền vào QR cũ; hãy hủy đơn và tạo lại.
                 </p>
               )}
-              {!paymentExpired && <div className="flex justify-center">
-                <div className="rounded-2xl border border-border bg-white p-4">
-                  <img
-                    src={paymentResult.qrUrl}
-                    alt={`QR thanh toán ${paymentResult.bank.bankCode}`}
-                    className="h-72 w-72 object-contain"
-                  />
+              {!paymentExpired && (
+                <div className="flex justify-center">
+                  <div className="rounded-2xl border border-border bg-white p-4">
+                    <img
+                      src={paymentResult.qrUrl}
+                      alt={`QR thanh toán ${paymentResult.bank.bankCode}`}
+                      className="h-72 w-72 object-contain"
+                    />
+                  </div>
                 </div>
-              </div>}
+              )}
+              {!paymentExpired && <PaymentQrDownloadButton paymentId={paymentResult.id} />}
 
               {!paymentExpired && (
-              <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                <div className="space-y-3 text-sm">
-                  {[
-                    { label: "Ngân hàng", display: paymentResult.bank.bankCode, copy: paymentResult.bank.bankCode },
-                    { label: "Số tài khoản", display: paymentResult.bank.accountNumber, copy: paymentResult.bank.accountNumber },
-                    ...(paymentResult.bank.accountHolder ? [{ label: "Chủ tài khoản", display: paymentResult.bank.accountHolder, copy: paymentResult.bank.accountHolder }] : []),
-                    { label: "Số tiền", display: `${paymentResult.amountVnd.toLocaleString("vi-VN")}đ`, copy: String(paymentResult.amountVnd) },
-                    { label: "Nội dung", display: paymentResult.orderCode, copy: paymentResult.orderCode },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center justify-between gap-3">
-                      <span className="shrink-0 text-muted-foreground">{item.label}</span>
-                      <div className="flex min-w-0 items-center gap-2">
-                        <strong className="break-all text-right">{item.display}</strong>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className="h-8 w-8 shrink-0"
-                          aria-label={`Sao chép ${item.label}`}
-                          title={`Sao chép ${item.label}`}
-                          onClick={() => void copyPaymentValue(item.label, item.copy)}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
+                <div className="rounded-xl border border-border bg-secondary/30 p-4">
+                  <div className="space-y-3 text-sm">
+                    {[
+                      {
+                        label: "Ngân hàng",
+                        display: paymentResult.bank.bankCode,
+                        copy: paymentResult.bank.bankCode,
+                      },
+                      {
+                        label: "Số tài khoản",
+                        display: paymentResult.bank.accountNumber,
+                        copy: paymentResult.bank.accountNumber,
+                      },
+                      ...(paymentResult.bank.accountHolder
+                        ? [
+                            {
+                              label: "Chủ tài khoản",
+                              display: paymentResult.bank.accountHolder,
+                              copy: paymentResult.bank.accountHolder,
+                            },
+                          ]
+                        : []),
+                      {
+                        label: "Số tiền",
+                        display: `${paymentResult.amountVnd.toLocaleString("vi-VN")}đ`,
+                        copy: String(paymentResult.amountVnd),
+                      },
+                      {
+                        label: "Nội dung",
+                        display: paymentResult.orderCode,
+                        copy: paymentResult.orderCode,
+                      },
+                    ].map((item) => (
+                      <div key={item.label} className="flex items-center justify-between gap-3">
+                        <span className="shrink-0 text-muted-foreground">{item.label}</span>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <strong className="break-all text-right">{item.display}</strong>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-8 w-8 shrink-0"
+                            aria-label={`Sao chép ${item.label}`}
+                            title={`Sao chép ${item.label}`}
+                            onClick={() => void copyPaymentValue(item.label, item.copy)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="mt-4 w-full"
+                    onClick={() =>
+                      void copyPaymentValue(
+                        "toàn bộ thông tin",
+                        [
+                          `Ngân hàng: ${paymentResult.bank.bankCode}`,
+                          `Số tài khoản: ${paymentResult.bank.accountNumber}`,
+                          ...(paymentResult.bank.accountHolder
+                            ? [`Chủ tài khoản: ${paymentResult.bank.accountHolder}`]
+                            : []),
+                          `Số tiền: ${paymentResult.amountVnd}`,
+                          `Nội dung: ${paymentResult.orderCode}`,
+                        ].join("\n"),
+                      )
+                    }
+                  >
+                    <Copy className="h-4 w-4" />
+                    Sao chép tất cả
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="mt-4 w-full"
-                  onClick={() => void copyPaymentValue("toàn bộ thông tin", [
-                    `Ngân hàng: ${paymentResult.bank.bankCode}`,
-                    `Số tài khoản: ${paymentResult.bank.accountNumber}`,
-                    ...(paymentResult.bank.accountHolder ? [`Chủ tài khoản: ${paymentResult.bank.accountHolder}`] : []),
-                    `Số tiền: ${paymentResult.amountVnd}`,
-                    `Nội dung: ${paymentResult.orderCode}`,
-                  ].join("\n"))}
-                >
-                  <Copy className="h-4 w-4" />
-                  Sao chép tất cả
-                </Button>
-              </div>
               )}
 
               {!paymentExpired && (
                 <p className="text-center text-sm text-muted-foreground">
-                  Chỉ chuyển khoản khi đơn còn hạn. Sau khi SePay xác nhận, Joinly sẽ tự động nâng cấp sự kiện.
+                  Chỉ chuyển khoản khi đơn còn hạn. Sau khi SePay xác nhận, Joinly sẽ tự động nâng
+                  cấp sự kiện.
                 </p>
               )}
               <Button

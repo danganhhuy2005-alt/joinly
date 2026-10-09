@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPayment } from "@/lib/payment.functions";
+import { PaymentQrDownloadButton } from "@/components/PaymentQrDownloadButton";
 import { createMonthlyEvent } from "@/lib/monthly.functions";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Plus, X, DoorOpen, Copy } from "lucide-react";
@@ -511,6 +512,8 @@ function CreateEvent() {
                 alt="QR thanh toán SePay"
                 className="mx-auto w-full max-w-72 rounded-xl"
               />
+
+              <PaymentQrDownloadButton paymentId={paymentOrder.id} />
               <div className="space-y-3 text-sm text-left">
                 {[
                   {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -8,6 +8,7 @@ import {
   Check,
   Loader2,
   DoorOpen,
+  Download,
   Users,
   Calendar,
   MapPin,
@@ -18,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getRoomAccessCode, updateRoomAccessCode } from "@/lib/room-access.functions";
@@ -42,13 +44,16 @@ function RoomCard({
   room,
   canEditCode,
   onCodeChanged,
+  canDownloadQr,
 }: {
   eventId: string;
   room: Room;
   canEditCode: boolean;
+  canDownloadQr: boolean;
   onCodeChanged: (roomId: string, hasCode: boolean) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const joinUrl =
     typeof window !== "undefined" ? `${window.location.origin}/join/${eventId}/${room.id}` : "";
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
@@ -78,6 +83,40 @@ function RoomCard({
       setCodeInput("");
     } finally {
       setLoadingCode(false);
+    }
+  };
+
+  const downloadQr = () => {
+    if (!canEditCode || !joinUrl) return;
+
+    const canvas = qrCanvasRef.current;
+
+    if (!canvas) {
+      toast.error("Mã QR chưa sẵn sàng để tải.");
+      return;
+    }
+
+    try {
+      const safeName = room.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[đĐ]/g, "d")
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .toLowerCase();
+
+      const link = document.createElement("a");
+
+      link.href = canvas.toDataURL("image/png");
+      link.download = `Joinly-QR-${safeName || room.id}.png`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      toast.success(`Đã tải QR phòng ${room.name}`);
+    } catch {
+      toast.error("Không thể tải mã QR.");
     }
   };
 
@@ -112,9 +151,51 @@ function RoomCard({
 
       <div className="mt-4 flex justify-center">
         <div className="rounded-xl border border-border bg-white p-3">
-          <img src={qrSrc} alt={`Mã QR phòng ${room.name}`} width={240} height={240} />
+          <>
+            <QRCodeSVG
+              value={joinUrl}
+              size={240}
+              marginSize={2}
+              level="M"
+              title={`QR tham gia phòng ${room.name}`}
+            />
+
+            {canEditCode && (
+              <QRCodeCanvas
+                ref={qrCanvasRef}
+                value={joinUrl}
+                size={960}
+                marginSize={4}
+                level="M"
+                style={{ display: "none" }}
+              />
+            )}
+          </>
         </div>
       </div>
+      {canEditCode && joinUrl && (
+        <QRCodeCanvas
+          ref={qrCanvasRef}
+          value={joinUrl}
+          size={960}
+          marginSize={4}
+          level="M"
+          style={{ display: "none" }}
+        />
+      )}
+
+      {canEditCode && (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-3 w-full"
+          onClick={downloadQr}
+          disabled={!joinUrl}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Tải mã QR (PNG)
+        </Button>
+      )}
 
       <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-secondary/50 p-2">
         <code className="flex-1 truncate px-2 text-left text-xs">{joinUrl}</code>
@@ -292,6 +373,7 @@ function EventRoom() {
                   eventId={id}
                   room={r}
                   canEditCode={role === "owner" || role === "co_owner"}
+                  canDownloadQr={role === "owner" || role === "co_owner"}
                   onCodeChanged={(roomId, hasCode) =>
                     setRooms((rs) =>
                       rs.map((x) => (x.id === roomId ? { ...x, has_access_code: hasCode } : x)),

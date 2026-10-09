@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { createPayment } from "@/lib/payment.functions";
 import { supabase } from "@/integrations/supabase/client";
+import { PaymentQrDownloadButton } from "@/components/PaymentQrDownloadButton";
 
 export const Route = createFileRoute("/_authenticated/monthly-checkout")({
   component: MonthlyCheckout,

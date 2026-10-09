@@ -3,6 +3,51 @@ import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+const cancelPaymentSchema = z.object({
+  eventId: z.string().uuid(),
+  paymentId: z.string().uuid(),
+});
+
+// Mark as cancelled rather than DELETE. The old order code must remain
+// available for late-transfer investigation; cancelled payments cannot
+// be recreated or granted a plan through the regular webhook flow.
+export const cancelEventPayment = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => cancelPaymentSchema.parse(data))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: event, error: eventError } = await supabaseAdmin
+      .from("events")
+      .select("organizer_id")
+      .eq("id", data.eventId)
+      .maybeSingle();
+
+    if (eventError) throw eventError;
+    if (!event || event.organizer_id !== context.userId) {
+      throw new Error("Chỉ Owner mới được hủy đơn của sự kiện.");
+    }
+
+    // Atomic conditional update: if webhook completed first, cancellation
+    // cannot overwrite 'paid'. Do not delete the row or recycle the order code.
+    const { data: cancelled, error } = await supabaseAdmin
+      .from("payments")
+      .update({ status: "cancelled" })
+      .eq("id", data.paymentId)
+      .eq("event_id", data.eventId)
+      .eq("user_id", context.userId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!cancelled) {
+      throw new Error("Đơn không còn ở trạng thái chờ. Hãy tải lại trang để kiểm tra.");
+    }
+
+    return { cancelled: true };
+  });
+
 const createPaymentSchema = z.object({
   renewQr: z.boolean().optional(),
   planCode: z.enum(["small", "standard", "pro", "monthly"]),
@@ -54,6 +99,19 @@ export const createPayment = createServerFn({
       throw new Error("Gói này không cần thanh toán.");
     }
 
+    // Server-side SePay orders are authoritative: the browser NEVER sends an amount.
+    const { randomInt } = await import("node:crypto");
+
+    let createdPayment: {
+      id: string;
+      order_code: string;
+      amount_vnd: number;
+      plan_code: string;
+      event_id: string | null;
+      status: string;
+      expires_at: string | null;
+    } | null = null;
+
     // ==========================================
     // 2. GÓI THEO SỰ KIỆN
     // Small / Standard / Pro
@@ -95,6 +153,61 @@ export const createPayment = createServerFn({
       if (event.lifecycle_status === "draft" && event.requested_plan_code !== plan.code) {
         throw new Error("Gói thanh toán không khớp với bản nháp. Vui lòng kiểm tra lại.");
       }
+
+      // Paid active events ONLY use a locked SQL transaction to calculate the
+      // difference from the CURRENT plan; never insert a full-price order here.
+      if (event.plan_code !== "free") {
+        if (data.renewQr) {
+          throw new Error("Làm mới QR ở đây chỉ dành cho bản nháp sự kiện.");
+        }
+
+        // New function is additive to the live database; its result is parsed
+        // at runtime until regenerated Supabase types are committed.
+        type UpgradeOrderArgs = {
+          p_event_id: string;
+          p_user_id: string;
+          p_plan_code: string;
+          p_order_code: string;
+          p_expires_at: string;
+        };
+        const createUpgradeOrder = supabaseAdmin.rpc.bind(supabaseAdmin) as unknown as (
+          name: "create_event_upgrade_payment",
+          args: UpgradeOrderArgs,
+        ) => Promise<{ data: unknown; error: { code?: string; message: string } | null }>;
+
+        const upgradePaymentSchema = z.object({
+          id: z.string().uuid(),
+          order_code: z.string().regex(/^JN\d{10}$/),
+          amount_vnd: z.number().int().positive(),
+          plan_code: z.enum(["small", "standard", "pro"]),
+          event_id: z.string().uuid(),
+          status: z.literal("pending"),
+          expires_at: z.string(),
+        });
+
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const orderCode = `JN${randomInt(1_000_000_000, 10_000_000_000)}`;
+          const { data: upgradeOrder, error } = await createUpgradeOrder(
+            "create_event_upgrade_payment",
+            {
+              p_event_id: event.id,
+              p_user_id: context.userId,
+              p_plan_code: plan.code,
+              p_order_code: orderCode,
+              p_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+            },
+          );
+          if (!error) {
+            createdPayment = upgradePaymentSchema.parse(upgradeOrder);
+            break;
+          }
+          if (error.code === "23505") continue;
+          throw new Error(error.message || "Không thể tạo đơn nâng cấp.");
+        }
+        if (!createdPayment) {
+          throw new Error("Không thể tạo mã nâng cấp. Vui lòng thử lại.");
+        }
+      }
     }
 
     // ==========================================
@@ -130,20 +243,9 @@ export const createPayment = createServerFn({
     // Ví dụ: JN5839201746
     // ==========================================
 
-    const { randomInt } = await import("node:crypto");
-
-    let createdPayment: {
-      id: string;
-      order_code: string;
-      amount_vnd: number;
-      plan_code: string;
-      event_id: string | null;
-      status: string;
-      expires_at: string | null;
-    } | null = null;
-
-    // Tìm đơn pending cũ của sự kiện
-    if (plan.billing_type === "event" && data.eventId) {
+    // Paid-event upgrades already have an atomically created/reused order.
+    // Tìm đơn pending cũ của bản nháp / sự kiện Free
+    if (plan.billing_type === "event" && data.eventId && !createdPayment) {
       const { data: oldPayment, error: lookupError } = await supabaseAdmin
         .from("payments")
         .select("id, order_code, amount_vnd, plan_code, event_id, status, expires_at")
@@ -243,7 +345,7 @@ export const createPayment = createServerFn({
 
         const orderCode = `JN${number}`;
 
-        const expiresAt = new Date(Date.now() + 1 * 60 * 1000).toISOString();
+        const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
         const { data: payment, error: paymentError } = await supabaseAdmin
           .from("payments")

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
-import { ChevronDown, Crown, LogOut, Sparkles, User } from "lucide-react";
+import { ChevronDown, LogOut, User, Crown } from "lucide-react";
+import { AppLogo } from "@/components/AppLogo";
 
 import { toast } from "sonner";
 
@@ -103,12 +104,8 @@ export function AuthenticatedHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link to="/my-events" className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-var(--shadow-soft)">
-            <Sparkles className="h-4 w-4" strokeWidth={2.5} />
-          </span>
-
-          <span className="font-display text-xl font-bold tracking-tight">Joinly</span>
+        <Link to="/my-events" className="flex items-center">
+          <AppLogo />
         </Link>
 
         <div className="flex items-center gap-3">

@@ -25,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { createPayment } from "@/lib/payment.functions";
+import { cancelEventPayment, createPayment } from "@/lib/payment.functions";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -95,10 +95,17 @@ function ManageEvent() {
   const [deletingEvent, setDeletingEvent] = useState(false);
 
   const createPaymentFn = useServerFn(createPayment);
+  const cancelPaymentFn = useServerFn(cancelEventPayment);
 
   const [billingOpen, setBillingOpen] = useState(false);
 
   const [creatingPayment, setCreatingPayment] = useState(false);
+  const [cancellingPayment, setCancellingPayment] = useState(false);
+  const [paymentClock, setPaymentClock] = useState(() => Date.now());
+
+  const [checkingOldOrder, setCheckingOldOrder] = useState(false);
+  const [oldOrderError, setOldOrderError] = useState<string | null>(null);
+  const [restoredOldOrder, setRestoredOldOrder] = useState(false);
 
   const [resumingPayment, setResumingPayment] = useState(false);
 
@@ -230,6 +237,110 @@ function ManageEvent() {
     load();
   }, [load]);
 
+  // Đơn đang chờ được lưu trong Supabase, không phải trong state của Dialog.
+  // Khi mở lại (kể cả reload/trở lại từ trang khác), lấy đúng đơn cũ và
+  // gọi createPayment cùng plan để server TÁI SỬ DỤNG order_code/số tiền.
+  useEffect(() => {
+    if (!billingOpen || !event || role !== "owner") return;
+
+    let cancelled = false;
+    const restoreOldOrder = async () => {
+      setCheckingOldOrder(true);
+      setOldOrderError(null);
+      setRestoredOldOrder(false);
+      setPaymentResult(null);
+
+      try {
+        const { data: pending, error } = await supabase
+          .from("payments")
+          .select("id, plan_code, expires_at")
+          .eq("event_id", id)
+          .eq("status", "pending")
+          .gt("expires_at", new Date().toISOString())
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (cancelled || !pending) return;
+
+        const planCode = pending.plan_code;
+        if (planCode !== "small" && planCode !== "standard" && planCode !== "pro") {
+          throw new Error("Đơn đang chờ có gói không hợp lệ. Vui lòng liên hệ hỗ trợ.");
+        }
+
+        // Hàm server kiểm tra lại quyền Owner, giá tiền và trạng thái;
+        // không tạo đơn mới nếu đơn cùng gói vẫn còn hiệu lực.
+        const result = await createPayment({ data: { eventId: id, planCode } });
+        if (cancelled) return;
+        setPaymentResult(result);
+        setRestoredOldOrder(true);
+      } catch (error) {
+        if (!cancelled) {
+          setOldOrderError(
+            error instanceof Error
+              ? error.message
+              : "Không kiểm tra được đơn thanh toán đang chờ. Vui lòng thử lại.",
+          );
+        }
+      } finally {
+        if (!cancelled) setCheckingOldOrder(false);
+      }
+    };
+
+    void restoreOldOrder();
+    return () => { cancelled = true; };
+  }, [billingOpen, event?.id, id, role]);
+
+  useEffect(() => {
+    if (!billingOpen || !paymentResult?.expiresAt) return;
+    setPaymentClock(Date.now());
+    const timer = window.setInterval(() => setPaymentClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [billingOpen, paymentResult?.expiresAt]);
+
+  const expiresAtMillis = paymentResult?.expiresAt
+    ? new Date(paymentResult.expiresAt).getTime()
+    : NaN;
+  const remainingSeconds = Number.isFinite(expiresAtMillis)
+    ? Math.max(0, Math.ceil((expiresAtMillis - paymentClock) / 1000))
+    : 0;
+  const paymentExpired = Boolean(paymentResult && remainingSeconds === 0);
+  const remainingTimeLabel = `${String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:${String(remainingSeconds % 60).padStart(2, "0")}`;
+
+  const closeBilling = async () => {
+    if (cancellingPayment) return;
+    if (creatingPayment || checkingOldOrder) {
+      toast.error("Đang kiểm tra/tạo đơn thanh toán, vui lòng hoàn tất thao tác này trước khi đóng.");
+      return;
+    }
+
+    if (paymentResult) {
+      const confirmed = window.confirm(
+        "Hủy đơn thanh toán đang chờ và đóng cửa sổ?\n\nChỉ xác nhận nếu bạn CHƯA chuyển khoản. Đơn hủy sẽ không được kích hoạt tự động nếu tiền đến muộn.",
+      );
+      if (!confirmed) return;
+
+      setCancellingPayment(true);
+      try {
+        await cancelPaymentFn({
+          data: { eventId: id, paymentId: paymentResult.id },
+        });
+        toast.success("Đã hủy đơn đang chờ. Bạn có thể chọn gói khác.");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Không thể hủy đơn thanh toán.");
+        return; // Keep the QR visible if cancellation failed.
+      } finally {
+        setCancellingPayment(false);
+      }
+    }
+
+    setBillingOpen(false);
+    setPaymentResult(null);
+    setOldOrderError(null);
+    setRestoredOldOrder(false);
+  };
+
   const toggleAllowlist = async (enabled: boolean) => {
     if (!event) return;
 
@@ -359,7 +470,6 @@ function ManageEvent() {
         data: {
           planCode,
           eventId: event.id,
-          renewQr: true,
         },
       });
 
@@ -375,13 +485,8 @@ function ManageEvent() {
   };
 
   const buyPlan = async (planCode: "small" | "standard" | "pro") => {
-    // Tạm khóa giao dịch nâng cấp gói trả phí cho đến khi server + SQL
-    // đồng bộ cơ chế thanh toán chênh lệch và chống QR cũ.
-    if (event?.plan_code !== "free") {
-      toast.error("Thanh toán nâng cấp chênh lệch chưa sẵn sàng. Chưa tạo QR để tránh thu trùng tiền.");
-      return;
-    }
-
+    // Không cho mở đơn mới khi chưa kiểm tra được đơn cũ.
+    if (checkingOldOrder || oldOrderError || creatingPayment) return;
     setCreatingPayment(true);
 
     try {
@@ -393,6 +498,7 @@ function ManageEvent() {
       });
 
       setPaymentResult(result);
+      setRestoredOldOrder(false);
     } catch (error) {
       console.error(error);
 
@@ -494,7 +600,7 @@ function ManageEvent() {
                 <QrCode className="h-4 w-4" />
               )}
 
-              {resumingPayment ? "Đang tạo mã QR mới..." : "Tiếp tục thanh toán"}
+              {resumingPayment ? "Đang mở thanh toán..." : "Tiếp tục thanh toán"}
             </Button>
 
             <Button asChild className="w-full">
@@ -582,6 +688,8 @@ function ManageEvent() {
                 variant="outline"
                 onClick={() => {
                   setPaymentResult(null);
+                  setOldOrderError(null);
+                  setCheckingOldOrder(true);
                   setBillingOpen(true);
                 }}
               >
@@ -770,21 +878,33 @@ function ManageEvent() {
       <Dialog
         open={billingOpen}
         onOpenChange={(open) => {
-          setBillingOpen(open);
-
-          if (!open) {
-            setPaymentResult(null);
-          }
+          if (open) setBillingOpen(true);
+          else void closeBilling();
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto overscroll-contain">
           <DialogHeader>
             <DialogTitle>Nâng cấp sự kiện</DialogTitle>
 
-            <DialogDescription>Chọn gói phù hợp với số lượng người tham dự.</DialogDescription>
+            <DialogDescription>
+              Chọn gói phù hợp với số lượng người tham dự.
+              {event?.plan_code !== "free" && " Chỉ thanh toán phần chênh lệch; số tiền chính xác sẽ hiện trên QR."}
+            </DialogDescription>
           </DialogHeader>
 
-          {!paymentResult ? (
+          {checkingOldOrder ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Đang kiểm tra và khôi phục đơn thanh toán cũ...
+            </div>
+          ) : oldOrderError ? (
+            <div className="space-y-3 rounded-xl border border-border p-4">
+              <p className="text-sm text-destructive">{oldOrderError}</p>
+              <p className="text-sm text-muted-foreground">
+                Chưa tạo đơn mới để tránh thu trùng. Bạn có thể đóng và mở lại cửa sổ để thử lại.
+              </p>
+            </div>
+          ) : !paymentResult ? (
             <div className="grid gap-3 sm:grid-cols-3">
               {event.plan_code === "free" && <button
                 type="button"
@@ -827,16 +947,38 @@ function ManageEvent() {
             </div>
           ) : (
             <div className="space-y-5">
-              <div className="flex justify-center">
+              {restoredOldOrder && (
+                <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+                  Đã khôi phục đơn thanh toán đang chờ. Đây là mã đơn cũ, không bị tạo đơn mới.
+                </p>
+              )}
+              <div className="rounded-xl border border-border bg-secondary/30 p-3 text-center text-sm">
+                <div className="font-medium">Thời gian thanh toán còn lại</div>
+                <div className={paymentExpired ? "mt-1 text-2xl font-bold text-destructive" : "mt-1 text-2xl font-bold text-primary"}>
+                  {paymentExpired ? "Đã hết hạn" : remainingTimeLabel}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Hạn thanh toán: {paymentResult.expiresAt
+                    ? new Date(paymentResult.expiresAt).toLocaleString("vi-VN")
+                    : "Không xác định"}
+                </p>
+              </div>
+              {paymentExpired && (
+                <p className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">
+                  Đơn đã hết hạn. Không chuyển tiền vào QR cũ; hãy hủy đơn và tạo lại.
+                </p>
+              )}
+              {!paymentExpired && <div className="flex justify-center">
                 <div className="rounded-2xl border border-border bg-white p-4">
                   <img
                     src={paymentResult.qrUrl}
-                    alt="QR thanh toán TPBank"
+                    alt={`QR thanh toán ${paymentResult.bank.bankCode}`}
                     className="h-72 w-72 object-contain"
                   />
                 </div>
-              </div>
+              </div>}
 
+              {!paymentExpired && (
               <div className="rounded-xl border border-border bg-secondary/30 p-4">
                 <div className="space-y-3 text-sm">
                   {[
@@ -881,11 +1023,23 @@ function ManageEvent() {
                   Sao chép tất cả
                 </Button>
               </div>
+              )}
 
-              <p className="text-center text-sm text-muted-foreground">
-                Quét QR bằng ứng dụng ngân hàng. Sau khi SePay xác nhận, Joinly sẽ tự động nâng cấp
-                sự kiện.
-              </p>
+              {!paymentExpired && (
+                <p className="text-center text-sm text-muted-foreground">
+                  Chỉ chuyển khoản khi đơn còn hạn. Sau khi SePay xác nhận, Joinly sẽ tự động nâng cấp sự kiện.
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="destructive"
+                className="w-full"
+                disabled={cancellingPayment || creatingPayment || checkingOldOrder}
+                onClick={() => void closeBilling()}
+              >
+                {cancellingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Hủy đơn và đóng
+              </Button>
             </div>
           )}
 

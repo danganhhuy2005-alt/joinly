@@ -1,22 +1,23 @@
-import { useEffect, type ReactNode, useState } from "react";
+import { useEffect, useState } from "react";
+import { CalendarPlus } from "lucide-react";
 
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
 import {
   ArrowRight,
   BarChart3,
-  CalendarPlus,
   Crown,
   QrCode,
   Sparkles,
-  Users,
   ShieldCheck,
   DoorOpen,
   FileDown,
+  Users,
 } from "lucide-react";
 
 import { AuthModal } from "@/components/AuthModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { AppLogo } from "@/components/AppLogo";
 
 import { useAuth } from "@/hooks/use-auth";
 
@@ -128,10 +129,8 @@ function Header({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps)
     <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         {/* LOGO */}
-        <Link to={loggedIn ? "/my-events" : "/"} className="flex items-center gap-2">
-          <Logo />
-
-          <span className="font-display text-xl font-bold tracking-tight">Joinly</span>
+        <Link to={loggedIn ? "/my-events" : "/"} className="flex items-center">
+          <AppLogo />
         </Link>
 
         {/* MENU */}
@@ -199,14 +198,6 @@ function Header({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps)
         </div>
       </div>
     </header>
-  );
-}
-
-function Logo() {
-  return (
-    <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-var(--shadow-soft)">
-      <Sparkles className="h-4 w-4" strokeWidth={2.5} />
-    </span>
   );
 }
 
@@ -303,82 +294,8 @@ function Hero({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps) {
             Bắt đầu miễn phí với tối đa 50 người tham dự · Không cần thẻ thanh toán
           </p>
         </div>
-
-        <HeroPreview />
       </div>
     </section>
-  );
-}
-
-function HeroPreview() {
-  return (
-    <div className="relative mx-auto mt-16 max-w-4xl">
-      <div
-        className="relative overflow-hidden rounded-2xl border border-border bg-card p-2"
-        style={{
-          boxShadow: "var(--shadow-elegant)",
-        }}
-      >
-        <div className="rounded-xl bg-linear-to-br from-primary-soft to-background p-8">
-          <div className="grid gap-4 md:grid-cols-2">
-            <PreviewCard
-              icon={<CalendarPlus className="h-5 w-5" />}
-              title="Workshop UI/UX"
-              meta="20 tháng 6 · 18:00"
-              tone="primary"
-            />
-
-            <PreviewCard
-              icon={<Users className="h-5 w-5" />}
-              title="142 người tham gia"
-              meta="QR Room đang mở"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PreviewCard({
-  icon,
-  title,
-  meta,
-  tone,
-}: {
-  icon: ReactNode;
-  title: string;
-  meta: string;
-  tone?: "primary";
-}) {
-  const isPrimary = tone === "primary";
-
-  return (
-    <div
-      className={`rounded-xl border p-4 text-left ${
-        isPrimary
-          ? "border-primary/20 bg-primary text-primary-foreground"
-          : "border-border bg-card text-card-foreground"
-      }`}
-    >
-      <div
-        className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg ${
-          isPrimary ? "bg-primary-foreground/15" : "bg-primary-soft text-primary"
-        }`}
-      >
-        {icon}
-      </div>
-
-      <div className="text-sm font-semibold">{title}</div>
-
-      <div
-        className={`mt-1 text-xs ${
-          isPrimary ? "text-primary-foreground/80" : "text-muted-foreground"
-        }`}
-      >
-        {meta}
-      </div>
-    </div>
   );
 }
 
@@ -746,12 +663,10 @@ function Footer() {
     <footer id="lien-he" className="border-t border-border">
       <div className="mx-auto max-w-6xl px-6 py-10">
         <div className="flex flex-col items-center justify-between gap-5 sm:flex-row">
-          <div className="flex items-center gap-2">
-            <Logo />
+          <div className="flex items-center gap-3">
+            <AppLogo imageClassName="h-9" />
 
-            <span className="font-display font-bold">Joinly</span>
-
-            <span className="text-sm text-muted-foreground">· Quản lý sự kiện bằng QR</span>
+            <span className="text-sm text-muted-foreground">Quản lý sự kiện bằng QR</span>
           </div>
 
           <div className="flex items-center gap-5 text-sm text-muted-foreground">

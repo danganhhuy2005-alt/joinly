@@ -12,6 +12,8 @@ import {
   Eye,
   EyeOff,
   Filter,
+  ChevronDown,
+  ChevronUp,
   Search,
 } from "lucide-react";
 
@@ -115,6 +117,7 @@ function Dashboard() {
   const [role, setRole] = useState<EventRole>(null);
 
   const [demoBusy, setDemoBusy] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
   const [demoCount, setDemoCount] = useState(5);
   const [demoRoomId, setDemoRoomId] = useState("");
   const addDemoOnServer = useServerFn(addEventDemoParticipants);
@@ -642,82 +645,100 @@ function Dashboard() {
         </div>
 
         {/* NGƯỜI DEMO - Owner, áp dụng mọi gói, vẫn chịu giới hạn người tham gia */}
+        {/* NGƯỜI DEMO */}
         {role === "owner" && (
-          <div className="mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4">
-            <label className="flex flex-col gap-1 text-sm">
-              Số người demo
-              <input
-                type="number"
-                min={1}
-                max={Math.min(
-                  700,
-                  Math.max(
-                    1,
+          <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-card">
+            <button
+              type="button"
+              onClick={() => setDemoOpen((prev) => !prev)}
+              aria-expanded={demoOpen}
+              className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold transition-colors hover:bg-secondary/50"
+            >
+              <span>Thêm người demo</span>
+
+              {demoOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+
+            {demoOpen && (
+              <div className="flex flex-wrap items-end gap-3 border-t border-border p-4">
+                <label className="flex flex-col gap-1 text-sm">
+                  Số người demo
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.min(
+                      700,
+                      Math.max(
+                        1,
+                        event.attendee_limit -
+                          new Set(participants.map((p) => p.email.trim().toLowerCase())).size,
+                      ),
+                    )}
+                    value={demoCount}
+                    onChange={(e) =>
+                      setDemoCount(e.target.value === "" ? 0 : Number(e.target.value))
+                    }
+                    className="h-10 w-28 rounded-lg border border-border bg-background px-3"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm">
+                  Chọn phòng
+                  <select
+                    value={demoRoomId || rooms[0]?.id || ""}
+                    onChange={(e) => setDemoRoomId(e.target.value)}
+                    className="h-10 min-w-40 rounded-lg border border-border bg-background px-3"
+                  >
+                    {rooms.map((room) => (
+                      <option key={room.id} value={room.id}>
+                        {room.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <Button
+                  type="button"
+                  disabled={
+                    demoBusy ||
+                    rooms.length === 0 ||
+                    demoCount < 1 ||
+                    demoCount >
+                      Math.min(
+                        700,
+                        Math.max(
+                          0,
+                          event.attendee_limit -
+                            new Set(participants.map((p) => p.email.trim().toLowerCase())).size,
+                        ),
+                      ) ||
+                    !Number.isInteger(demoCount)
+                  }
+                  onClick={() => void addDemoPeople()}
+                >
+                  {demoBusy ? "Đang xử lý..." : "Thêm người demo"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={demoBusy}
+                  onClick={() => void deleteDemoPeople()}
+                >
+                  Xóa người demo
+                </Button>
+
+                <p className="w-full text-xs text-muted-foreground">
+                  Giới hạn {event.attendee_limit} người/sự kiện; còn tối đa{" "}
+                  {Math.max(
+                    0,
                     event.attendee_limit -
                       new Set(participants.map((p) => p.email.trim().toLowerCase())).size,
-                  ),
-                )}
-                value={demoCount}
-                onChange={(e) => setDemoCount(e.target.value === "" ? 0 : Number(e.target.value))}
-                className="h-10 w-28 rounded-lg border border-border bg-background px-3"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1 text-sm">
-              Chọn phòng
-              <select
-                value={demoRoomId || rooms[0]?.id || ""}
-                onChange={(e) => setDemoRoomId(e.target.value)}
-                className="h-10 min-w-40 rounded-lg border border-border bg-background px-3"
-              >
-                {rooms.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {room.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <Button
-              type="button"
-              disabled={
-                demoBusy ||
-                rooms.length === 0 ||
-                demoCount < 1 ||
-                demoCount >
-                  Math.min(
-                    700,
-                    Math.max(
-                      0,
-                      event.attendee_limit -
-                        new Set(participants.map((p) => p.email.trim().toLowerCase())).size,
-                    ),
-                  ) ||
-                !Number.isInteger(demoCount)
-              }
-              onClick={() => void addDemoPeople()}
-            >
-              {demoBusy ? "Đang xử lý..." : "Thêm người demo"}
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              disabled={demoBusy}
-              onClick={() => void deleteDemoPeople()}
-            >
-              Xóa người demo
-            </Button>
-
-            <p className="w-full text-xs text-muted-foreground">
-              Giới hạn {event.attendee_limit} người/sự kiện; còn tối đa{" "}
-              {Math.max(
-                0,
-                event.attendee_limit -
-                  new Set(participants.map((p) => p.email.trim().toLowerCase())).size,
-              )}{" "}
-              suất. Người demo cũng chiếm suất. Chỉ Owner được thao tác.
-            </p>
+                  )}{" "}
+                  suất. Người demo cũng chiếm suất. Chỉ Owner được thao tác.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

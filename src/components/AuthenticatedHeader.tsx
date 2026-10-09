@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
-import { ChevronDown, LogOut, Sparkles, User } from "lucide-react";
+import { ChevronDown, Crown, LogOut, Sparkles, User } from "lucide-react";
 
 import { toast } from "sonner";
 
@@ -112,6 +112,12 @@ export function AuthenticatedHeader() {
         </Link>
 
         <div className="flex items-center gap-3">
+          <Button asChild size="sm" variant="outline">
+            <Link to="/plans">
+              <Crown className="h-4 w-4" />
+              Gói
+            </Link>
+          </Button>
           <ThemeToggle />
 
           <DropdownMenu>

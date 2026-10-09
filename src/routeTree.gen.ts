@@ -15,6 +15,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AuthenticatedCreateEventRouteImport } from './routes/_authenticated/create-event'
+import { Route as AuthenticatedMonthlyCheckoutRouteImport } from './routes/_authenticated/monthly-checkout'
 import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
 import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/plans'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
@@ -59,6 +60,12 @@ const AuthenticatedCreateEventRoute =
   AuthenticatedCreateEventRouteImport.update({
     id: '/create-event',
     path: '/create-event',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMonthlyCheckoutRoute =
+  AuthenticatedMonthlyCheckoutRouteImport.update({
+    id: '/monthly-checkout',
+    path: '/monthly-checkout',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedMyEventsRoute = AuthenticatedMyEventsRouteImport.update({
@@ -148,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
+  '/monthly-checkout': typeof AuthenticatedMonthlyCheckoutRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/plans': typeof AuthenticatedPlansRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -170,6 +178,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
+  '/monthly-checkout': typeof AuthenticatedMonthlyCheckoutRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/plans': typeof AuthenticatedPlansRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -193,6 +202,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/_authenticated/create-event': typeof AuthenticatedCreateEventRoute
+  '/_authenticated/monthly-checkout': typeof AuthenticatedMonthlyCheckoutRoute
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
   '/_authenticated/plans': typeof AuthenticatedPlansRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/create-event'
+    | '/monthly-checkout'
     | '/my-events'
     | '/plans'
     | '/profile'
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/create-event'
+    | '/monthly-checkout'
     | '/my-events'
     | '/plans'
     | '/profile'
@@ -261,6 +273,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/_authenticated/create-event'
+    | '/_authenticated/monthly-checkout'
     | '/_authenticated/my-events'
     | '/_authenticated/plans'
     | '/_authenticated/profile'
@@ -330,6 +343,13 @@ declare module '@tanstack/react-router' {
       path: '/create-event'
       fullPath: '/create-event'
       preLoaderRoute: typeof AuthenticatedCreateEventRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/monthly-checkout': {
+      id: '/_authenticated/monthly-checkout'
+      path: '/monthly-checkout'
+      fullPath: '/monthly-checkout'
+      preLoaderRoute: typeof AuthenticatedMonthlyCheckoutRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/my-events': {
@@ -442,6 +462,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCreateEventRoute: typeof AuthenticatedCreateEventRoute
+  AuthenticatedMonthlyCheckoutRoute: typeof AuthenticatedMonthlyCheckoutRoute
   AuthenticatedMyEventsRoute: typeof AuthenticatedMyEventsRoute
   AuthenticatedPlansRoute: typeof AuthenticatedPlansRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
@@ -456,6 +477,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCreateEventRoute: AuthenticatedCreateEventRoute,
+  AuthenticatedMonthlyCheckoutRoute: AuthenticatedMonthlyCheckoutRoute,
   AuthenticatedMyEventsRoute: AuthenticatedMyEventsRoute,
   AuthenticatedPlansRoute: AuthenticatedPlansRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,

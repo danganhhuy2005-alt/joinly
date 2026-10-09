@@ -2,6 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ArrowLeft, Check, Crown, Sparkles, Zap } from "lucide-react";
 
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/plans")({
@@ -16,7 +19,88 @@ export const Route = createFileRoute("/_authenticated/plans")({
   component: PlansPage,
 });
 
+type MonthlySubscription = {
+  id: string;
+  status: string;
+  starts_at: string;
+  expires_at: string;
+};
+
 function PlansPage() {
+  const [subscriptions, setSubscriptions] = useState<MonthlySubscription[]>([]);
+
+  const [monthlyLoading, setMonthlyLoading] = useState(true);
+  const [monthlyError, setMonthlyError] = useState(false);
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    setNow(Date.now());
+
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 60000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMonthly = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) throw new Error("Chưa đăng nhập");
+
+        const { data, error } = await supabase
+          .from("user_subscriptions")
+          .select("id, status, starts_at, expires_at")
+          .eq("user_id", user.id)
+          .eq("plan_code", "monthly")
+          .order("expires_at", { ascending: false })
+          .limit(20);
+
+        if (error) throw error;
+
+        if (!cancelled) {
+          setSubscriptions(data ?? []);
+          setMonthlyError(false);
+        }
+      } catch (error) {
+        console.error("Monthly error:", error);
+
+        if (!cancelled) setMonthlyError(true);
+      } finally {
+        if (!cancelled) setMonthlyLoading(false);
+      }
+    };
+
+    void loadMonthly();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const activeMonthly = subscriptions.find(
+    (s) =>
+      s.status === "active" &&
+      new Date(s.starts_at).getTime() <= now &&
+      new Date(s.expires_at).getTime() > now,
+  );
+
+  const nextMonthly = subscriptions.find(
+    (s) => s.status === "active" && new Date(s.starts_at).getTime() > now,
+  );
+
+  const daysRemaining = activeMonthly
+    ? Math.ceil((new Date(activeMonthly.expires_at).getTime() - now) / 86400000)
+    : 0;
+
+  const formatDate = (value: string) => new Date(value).toLocaleDateString("vi-VN");
+
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto max-w-7xl px-6 py-10">
@@ -102,8 +186,8 @@ function PlansPage() {
                 <Feature text="Export dữ liệu CSV" />
               </div>
 
-              <Button type="button" variant="outline" className="mt-6 w-full">
-                Chọn Small
+              <Button asChild variant="outline" className="mt-6 w-full">
+                <Link to="/my-events">Chọn sự kiện để nâng cấp</Link>
               </Button>
             </div>
 
@@ -139,8 +223,8 @@ function PlansPage() {
                 <Feature text="Quản lý nhiều phòng" />
               </div>
 
-              <Button type="button" className="mt-6 w-full">
-                Chọn Standard
+              <Button asChild className="mt-6 w-full">
+                <Link to="/my-events">Chọn sự kiện để nâng cấp</Link>
               </Button>
             </div>
 
@@ -170,8 +254,8 @@ function PlansPage() {
                 <Feature text="Phù hợp hội thảo lớn" />
               </div>
 
-              <Button type="button" variant="outline" className="mt-6 w-full">
-                Chọn Pro
+              <Button asChild variant="outline" className="mt-6 w-full">
+                <Link to="/my-events">Chọn sự kiện để nâng cấp</Link>
               </Button>
             </div>
           </div>
@@ -202,15 +286,69 @@ function PlansPage() {
                   Dành cho cá nhân hoặc CLB thường xuyên tổ chức nhiều sự kiện.
                 </p>
 
+                <div className="mt-4 space-y-2">
+                  {monthlyLoading ? (
+                    <p className="text-sm text-muted-foreground">Đang kiểm tra gói Monthly...</p>
+                  ) : monthlyError ? (
+                    <p className="text-sm text-destructive">
+                      Không thể tải trạng thái gói Monthly.
+                    </p>
+                  ) : activeMonthly ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-primary">Monthly đang hoạt động</p>
+
+                      <p className="text-sm">Hết hạn: {formatDate(activeMonthly.expires_at)}</p>
+
+                      {daysRemaining <= 7 && (
+                        <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+                          Gói Monthly còn {daysRemaining} ngày. Hãy gia hạn để tiếp tục sử dụng.
+                        </p>
+                      )}
+
+                      {nextMonthly && (
+                        <p className="text-sm text-primary">
+                          Đã gia hạn. Chu kỳ tiếp theo bắt đầu ngày{" "}
+                          {formatDate(nextMonthly.starts_at)}.
+                        </p>
+                      )}
+                    </div>
+                  ) : nextMonthly ? (
+                    <p className="text-sm font-medium text-primary">
+                      Monthly đã thanh toán, sẽ bắt đầu ngày {formatDate(nextMonthly.starts_at)}.
+                    </p>
+                  ) : subscriptions.length > 0 ? (
+                    <p className="text-sm text-amber-600">
+                      Gói Monthly đã hết hạn hoặc không còn hiệu lực.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Bạn chưa đăng ký Monthly.</p>
+                  )}
+                </div>
+
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <Feature text="Tối đa 3 sự kiện trong 30 ngày" />
-                  <Feature text="Quản lý gói theo tài khoản" />
+                  <Feature text="Tối đa 3 sự kiện trong mỗi chu kỳ 30 ngày" />
+                  <Feature text="Tối đa 500 người mỗi sự kiện" />
+                  <Feature text="Gia hạn thủ công, không tự động trừ tiền" />
+                  <Feature text="Sự kiện đã tạo vẫn hoạt động khi gói hết hạn" />
+                  <Feature text="Gia hạn để nhận 3 suất sự kiện mới" />
                 </div>
               </div>
 
-              <Button type="button" size="lg" className="w-full md:w-auto">
-                Chọn Monthly
-              </Button>
+              {monthlyLoading || monthlyError || nextMonthly ? (
+                <Button type="button" size="lg" className="w-full md:w-auto" disabled>
+                  {monthlyLoading
+                    ? "Đang kiểm tra..."
+                    : monthlyError
+                      ? "Không thể kiểm tra gói"
+                      : "Đã gia hạn Monthly"}
+                </Button>
+              ) : (
+                <Button asChild size="lg" className="w-full md:w-auto">
+                  <Link to="/monthly-checkout">
+                    {activeMonthly ? "Gia hạn Monthly" : "Mua Monthly"}
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
         </section>

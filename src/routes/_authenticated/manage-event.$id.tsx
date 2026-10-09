@@ -15,6 +15,7 @@ import {
   Users,
   CreditCard,
   Crown,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -374,6 +375,13 @@ function ManageEvent() {
   };
 
   const buyPlan = async (planCode: "small" | "standard" | "pro") => {
+    // Tạm khóa giao dịch nâng cấp gói trả phí cho đến khi server + SQL
+    // đồng bộ cơ chế thanh toán chênh lệch và chống QR cũ.
+    if (event?.plan_code !== "free") {
+      toast.error("Thanh toán nâng cấp chênh lệch chưa sẵn sàng. Chưa tạo QR để tránh thu trùng tiền.");
+      return;
+    }
+
     setCreatingPayment(true);
 
     try {
@@ -391,6 +399,15 @@ function ManageEvent() {
       toast.error(error instanceof Error ? error.message : "Không thể tạo đơn thanh toán.");
     } finally {
       setCreatingPayment(false);
+    }
+  };
+
+  const copyPaymentValue = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`Đã sao chép ${label.toLowerCase()}.`);
+    } catch {
+      toast.error("Không thể sao chép. Vui lòng thử lại.");
     }
   };
 
@@ -559,7 +576,7 @@ function ManageEvent() {
               <span className="text-muted-foreground">• tối đa {event.attendee_limit} người</span>
             </div>
 
-            {role === "owner" && (
+            {role === "owner" && ["free", "small", "standard"].includes(event.plan_code) && (
               <Button
                 size="sm"
                 variant="outline"
@@ -769,7 +786,7 @@ function ManageEvent() {
 
           {!paymentResult ? (
             <div className="grid gap-3 sm:grid-cols-3">
-              <button
+              {event.plan_code === "free" && <button
                 type="button"
                 disabled={creatingPayment}
                 onClick={() => void buyPlan("small")}
@@ -780,9 +797,9 @@ function ManageEvent() {
                 <p className="mt-1 text-2xl font-bold">50.000đ</p>
 
                 <p className="mt-2 text-sm text-muted-foreground">Tối đa 100 người</p>
-              </button>
+              </button>}
 
-              <button
+              {(event.plan_code === "free" || event.plan_code === "small") && <button
                 type="button"
                 disabled={creatingPayment}
                 onClick={() => void buyPlan("standard")}
@@ -793,9 +810,9 @@ function ManageEvent() {
                 <p className="mt-1 text-2xl font-bold">88.000đ</p>
 
                 <p className="mt-2 text-sm text-muted-foreground">Tối đa 300 người</p>
-              </button>
+              </button>}
 
-              <button
+              {(event.plan_code === "free" || event.plan_code === "small" || event.plan_code === "standard") && <button
                 type="button"
                 disabled={creatingPayment}
                 onClick={() => void buyPlan("pro")}
@@ -806,7 +823,7 @@ function ManageEvent() {
                 <p className="mt-1 text-2xl font-bold">199.000đ</p>
 
                 <p className="mt-2 text-sm text-muted-foreground">Tối đa 700 người</p>
-              </button>
+              </button>}
             </div>
           ) : (
             <div className="space-y-5">
@@ -821,31 +838,48 @@ function ManageEvent() {
               </div>
 
               <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                <div className="grid gap-2 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Ngân hàng</span>
-
-                    <strong>{paymentResult.bank.bankCode}</strong>
-                  </div>
-
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Số tài khoản</span>
-
-                    <strong>{paymentResult.bank.accountNumber}</strong>
-                  </div>
-
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Số tiền</span>
-
-                    <strong>{paymentResult.amountVnd.toLocaleString("vi-VN")}đ</strong>
-                  </div>
-
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Nội dung</span>
-
-                    <strong className="font-mono">{paymentResult.orderCode}</strong>
-                  </div>
+                <div className="space-y-3 text-sm">
+                  {[
+                    { label: "Ngân hàng", display: paymentResult.bank.bankCode, copy: paymentResult.bank.bankCode },
+                    { label: "Số tài khoản", display: paymentResult.bank.accountNumber, copy: paymentResult.bank.accountNumber },
+                    ...(paymentResult.bank.accountHolder ? [{ label: "Chủ tài khoản", display: paymentResult.bank.accountHolder, copy: paymentResult.bank.accountHolder }] : []),
+                    { label: "Số tiền", display: `${paymentResult.amountVnd.toLocaleString("vi-VN")}đ`, copy: String(paymentResult.amountVnd) },
+                    { label: "Nội dung", display: paymentResult.orderCode, copy: paymentResult.orderCode },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center justify-between gap-3">
+                      <span className="shrink-0 text-muted-foreground">{item.label}</span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <strong className="break-all text-right">{item.display}</strong>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-8 w-8 shrink-0"
+                          aria-label={`Sao chép ${item.label}`}
+                          title={`Sao chép ${item.label}`}
+                          onClick={() => void copyPaymentValue(item.label, item.copy)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="mt-4 w-full"
+                  onClick={() => void copyPaymentValue("toàn bộ thông tin", [
+                    `Ngân hàng: ${paymentResult.bank.bankCode}`,
+                    `Số tài khoản: ${paymentResult.bank.accountNumber}`,
+                    ...(paymentResult.bank.accountHolder ? [`Chủ tài khoản: ${paymentResult.bank.accountHolder}`] : []),
+                    `Số tiền: ${paymentResult.amountVnd}`,
+                    `Nội dung: ${paymentResult.orderCode}`,
+                  ].join("\n"))}
+                >
+                  <Copy className="h-4 w-4" />
+                  Sao chép tất cả
+                </Button>
               </div>
 
               <p className="text-center text-sm text-muted-foreground">

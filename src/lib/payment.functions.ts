@@ -106,6 +106,23 @@ export const createPayment = createServerFn({
       if (data.eventId) {
         throw new Error("Gói Monthly không cần chọn sự kiện.");
       }
+
+      const now = new Date().toISOString();
+
+      const { data: scheduled, error: subError } = await supabaseAdmin
+        .from("user_subscriptions")
+        .select("id")
+        .eq("user_id", context.userId)
+        .eq("plan_code", "monthly")
+        .eq("status", "active")
+        .gt("starts_at", now)
+        .limit(1);
+
+      if (subError) throw subError;
+
+      if (scheduled && scheduled.length > 0) {
+        throw new Error("Bạn đã gia hạn Monthly cho chu kỳ tiếp theo.");
+      }
     }
 
     // ==========================================
@@ -186,6 +203,39 @@ export const createPayment = createServerFn({
       createdPayment = newPayment as NonNullable<typeof createdPayment>;
     }
 
+    if (plan.billing_type === "monthly") {
+      const { data: oldMonthly, error: lookupError } = await supabaseAdmin
+        .from("payments")
+        .select("id, order_code, amount_vnd, plan_code, event_id, status, expires_at")
+        .eq("user_id", context.userId)
+        .eq("plan_code", "monthly")
+        .eq("status", "pending")
+        .maybeSingle();
+
+      if (lookupError) throw lookupError;
+
+      if (oldMonthly) {
+        const stillValid =
+          oldMonthly.expires_at !== null && new Date(oldMonthly.expires_at).getTime() > Date.now();
+
+        if (stillValid) {
+          if (oldMonthly.amount_vnd !== plan.price_vnd) {
+            throw new Error("Đơn Monthly cũ có giá khác. Cần đối soát trước khi tiếp tục.");
+          }
+
+          createdPayment = oldMonthly;
+        } else {
+          const { error: expireError } = await supabaseAdmin
+            .from("payments")
+            .update({ status: "expired" })
+            .eq("id", oldMonthly.id)
+            .eq("status", "pending");
+
+          if (expireError) throw expireError;
+        }
+      }
+    }
+
     // Retry vài lần nếu vô tình trùng order_code
     if (!createdPayment) {
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -231,43 +281,33 @@ export const createPayment = createServerFn({
           break;
         }
 
-        // 23505 = UNIQUE violation
-        // Nếu trùng order_code thì sinh mã khác
         if (paymentError?.code === "23505") {
-          // Có thể trùng order_code hoặc đã có yêu cầu
-          // khác tạo payment cho cùng sự kiện.
-
-          if (plan.billing_type === "event" && data.eventId) {
-            const { data: existingPending, error: fetchError } = await supabaseAdmin
+          if (plan.billing_type === "monthly") {
+            const { data: existing, error: existingError } = await supabaseAdmin
               .from("payments")
               .select("id, order_code, amount_vnd, plan_code, event_id, status, expires_at")
-              .eq("event_id", data.eventId)
+              .eq("user_id", context.userId)
+              .eq("plan_code", "monthly")
               .eq("status", "pending")
               .maybeSingle();
 
-            if (fetchError) throw fetchError;
+            if (existingError) throw existingError;
 
-            if (existingPending) {
-              if (existingPending.plan_code !== plan.code) {
-                throw new Error("Sự kiện đang có đơn thanh toán gói khác.");
-              }
-
-              const expiryMs = existingPending.expires_at
-                ? new Date(existingPending.expires_at).getTime()
-                : 0;
-
-              if (expiryMs <= Date.now()) {
-                throw new Error("Đơn thanh toán cũ vừa hết hạn. Vui lòng thử lại.");
-              }
-
-              // Dùng lại đơn vừa được yêu cầu khác tạo thành công
-              createdPayment = existingPending;
+            if (
+              existing &&
+              existing.amount_vnd === plan.price_vnd &&
+              existing.expires_at &&
+              new Date(existing.expires_at).getTime() > Date.now()
+            ) {
+              createdPayment = existing;
               break;
+            }
+
+            if (existing) {
+              throw new Error("Đơn Monthly đang được cập nhật. Vui lòng thử lại.");
             }
           }
 
-          // Không có đơn pending của event:
-          // Có thể chỉ trùng order_code, thử sinh mã mới.
           continue;
         }
 

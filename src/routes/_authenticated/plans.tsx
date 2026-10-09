@@ -152,7 +152,7 @@ function PlansPage() {
               <div className="my-5 h-px bg-border" />
 
               <div className="flex-1 space-y-3 text-sm">
-                <Feature text="Tối đa 50 người tham dự" />
+                <Feature text="Tối đa 20 người tham dự" />
                 <Feature text="QR check-in / check-out" />
                 <Feature text="Dashboard sự kiện" />
                 <Feature text="Allow-list" />

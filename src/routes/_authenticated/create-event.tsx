@@ -40,7 +40,7 @@ const schema = z.object({
   rooms: z.array(roomSchema).min(1, "Cần ít nhất một phòng"),
 });
 const EVENT_PLANS = [
-  { code: "free", name: "Free", limit: 50, price: 0 },
+  { code: "free", name: "Free", limit: 20, price: 0 },
   { code: "small", name: "Small", limit: 100, price: 50000 },
   { code: "standard", name: "Standard", limit: 300, price: 88000 },
   { code: "pro", name: "Pro", limit: 700, price: 199000 },

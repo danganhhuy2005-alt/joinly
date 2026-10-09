@@ -291,7 +291,7 @@ function Hero({ loggedIn, loading, onLogin, onCreateEvent }: AuthActionsProps) {
           </div>
 
           <p className="mt-6 text-sm text-muted-foreground">
-            Bắt đầu miễn phí với tối đa 50 người tham dự · Không cần thẻ thanh toán
+            Bắt đầu miễn phí với tối đa 20 người tham dự
           </p>
         </div>
       </div>
@@ -460,7 +460,7 @@ function Pricing({ onCreateEvent }: { onCreateEvent: () => void }) {
       name: "Free",
       price: "0đ",
       suffix: "",
-      limit: "Tối đa 50 người",
+      limit: "Tối đa 20 người",
       description: "Dành cho sự kiện nhỏ.",
       popular: false,
     },

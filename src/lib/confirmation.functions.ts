@@ -74,3 +74,73 @@ export const registerParticipant = createServerFn({ method: "POST" })
       accessCode: data.accessCode,
     });
   });
+
+export const checkRegistrationSlots = createServerFn({
+  method: "POST",
+})
+  .inputValidator((data) =>
+    z
+      .object({
+        eventId: z.string().uuid(),
+        roomId: z.string().uuid(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const [{ data: event, error: eventError }, { data: room, error: roomError }] =
+      await Promise.all([
+        supabaseAdmin
+          .from("events")
+          .select("id, lifecycle_status, attendee_limit")
+          .eq("id", data.eventId)
+          .maybeSingle(),
+
+        supabaseAdmin
+          .from("event_rooms")
+          .select("id, event_id")
+          .eq("id", data.roomId)
+          .maybeSingle(),
+      ]);
+
+    if (eventError) throw eventError;
+    if (roomError) throw roomError;
+
+    if (!event || !room || room.event_id !== data.eventId) {
+      return { status: "invalid" as const };
+    }
+
+    if (event.lifecycle_status !== "active") {
+      return { status: "not_active" as const };
+    }
+
+    // Đếm email duy nhất trong toàn sự kiện.
+    // Phân trang để tránh giới hạn 1000 dòng.
+    const uniqueEmails = new Set<string>();
+    const batchSize = 1000;
+
+    for (let start = 0; ; start += batchSize) {
+      const { data: rows, error } = await supabaseAdmin
+        .from("participants")
+        .select("email")
+        .eq("event_id", data.eventId)
+        .order("id", { ascending: true })
+        .range(start, start + batchSize - 1);
+
+      if (error) throw error;
+
+      for (const row of rows ?? []) {
+        const normalized = row.email?.trim().toLowerCase();
+        if (normalized) uniqueEmails.add(normalized);
+      }
+
+      if (!rows || rows.length < batchSize) break;
+    }
+
+    const remaining = Math.max(0, event.attendee_limit - uniqueEmails.size);
+
+    return remaining > 0
+      ? { status: "available" as const, remaining }
+      : { status: "full" as const, remaining: 0 };
+  });

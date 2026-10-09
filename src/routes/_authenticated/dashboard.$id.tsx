@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
+
 import {
   ArrowLeft,
   Users,
@@ -13,8 +15,15 @@ import {
   Search,
 } from "lucide-react";
 
+import { useServerFn } from "@tanstack/react-start";
+
+import { addEventDemoParticipants, deleteEventDemoParticipants } from "@/lib/event-demo.functions";
+
 import { Button } from "@/components/ui/button";
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+import { toast } from "sonner";
 
 import {
   Select,
@@ -23,7 +32,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import { supabase } from "@/integrations/supabase/client";
+
 import { getEventRole, type EventRole } from "@/lib/event-role";
 
 export const Route = createFileRoute("/_authenticated/dashboard/$id")({
@@ -34,38 +45,57 @@ export const Route = createFileRoute("/_authenticated/dashboard/$id")({
       },
     ],
   }),
+
   component: Dashboard,
 });
 
 type EventRow = {
   id: string;
+
   name: string;
+
+  plan_code: string;
+
+  attendee_limit: number;
 };
 
 type Room = {
   id: string;
+
   name: string;
 };
 
 type Participant = {
   id: string;
+
   full_name: string;
+
   email: string;
+
   phone: string | null;
+
   student_id: string | null;
+
   room_id: string;
+
   created_at: string;
 
   checked_in: boolean;
+
   checked_in_at: string | null;
+
   checked_out_at: string | null;
+
   checked_in_by: string | null;
+
   checked_out_by: string | null;
 };
 
 type CheckinOperator = {
   user_id: string;
+
   full_name: string;
+
   role: string;
 };
 
@@ -83,6 +113,12 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   const [role, setRole] = useState<EventRole>(null);
+
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoCount, setDemoCount] = useState(5);
+  const [demoRoomId, setDemoRoomId] = useState("");
+  const addDemoOnServer = useServerFn(addEventDemoParticipants);
+  const deleteDemoOnServer = useServerFn(deleteEventDemoParticipants);
 
   const [showEmail, setShowEmail] = useState(false);
 
@@ -105,38 +141,63 @@ function Dashboard() {
 
     const [
       { data: ev, error: eventError },
+
       { data: rms, error: roomsError },
+
       { data: ps, error: participantsError },
+
       { data: operatorData, error: operatorError },
+
       currentRole,
     ] = await Promise.all([
-      supabase.from("events").select("id, name").eq("id", id).maybeSingle(),
+      supabase
+        .from("events")
+        .select("id, name, plan_code, attendee_limit")
+        .eq("id", id)
+        .maybeSingle(),
 
       supabase.from("event_rooms").select("id, name").eq("event_id", id).order("position"),
 
       supabase
+
         .from("participants")
+
         .select(
           `
+
   id,
+
   full_name,
+
   email,
+
   phone,
+
   student_id,
+
   room_id,
+
   created_at,
+
   checked_in,
+
   checked_in_at,
+
   checked_out_at,
+
   checked_in_by,
+
   checked_out_by
+
 `,
         )
 
         .eq("event_id", id)
+
         .order("created_at", {
           ascending: false,
         }),
+
       supabase.rpc("list_event_checkin_operators", {
         _event_id: id,
       }),
@@ -175,30 +236,48 @@ function Dashboard() {
 
   const reloadParticipants = useCallback(async () => {
     const { data, error } = await supabase
+
       .from("participants")
+
       .select(
         `
+
       id,
+
       full_name,
+
       email,
+
       phone,
+
       student_id,
+
       room_id,
+
       created_at,
+
       checked_in,
+
       checked_in_at,
+
       checked_out_at,
+
       checked_in_by,
+
       checked_out_by
+
     `,
       )
+
       .eq("event_id", id)
+
       .order("created_at", {
         ascending: false,
       });
 
     if (error) {
       console.error("Reload participants error:", error);
+
       return;
     }
 
@@ -211,19 +290,27 @@ function Dashboard() {
 
   useEffect(() => {
     const channel = supabase
+
       .channel(`participants-dashboard-${id}`)
+
       .on(
         "postgres_changes",
+
         {
           event: "*",
+
           schema: "public",
+
           table: "participants",
+
           filter: `event_id=eq.${id}`,
         },
+
         () => {
           void reloadParticipants();
         },
       )
+
       .subscribe();
 
     return () => {
@@ -232,24 +319,31 @@ function Dashboard() {
   }, [id, reloadParticipants]);
 
   const roomName = (roomId: string) => rooms.find((room) => room.id === roomId)?.name ?? "—";
+
   const operatorName = (userId: string | null) => {
     if (!userId) return "—";
 
     return operators.find((operator) => operator.user_id === userId)?.full_name ?? "Không xác định";
   };
+
   const formatDateTime = (value: string | null) => {
     if (!value) return "";
 
     return new Date(value).toLocaleString("vi-VN", {
       hour: "2-digit",
+
       minute: "2-digit",
+
       day: "2-digit",
+
       month: "2-digit",
+
       year: "numeric",
     });
   };
 
   const total = participants.length;
+
   const checkedInCount = participants.filter(
     (participant) =>
       (participant.checked_in_at || participant.checked_in) && !participant.checked_out_at,
@@ -297,8 +391,10 @@ function Dashboard() {
 
     return matchesRoom && matchesStatus && matchesSearch;
   });
+
   const csvEscape = (value: string | null | undefined) => {
     const text = String(value ?? "").replace(/"/g, '""');
+
     return `"${text}"`;
   };
 
@@ -306,24 +402,36 @@ function Dashboard() {
     if (!value) return '""';
 
     // Chỉ cho phép số để tránh CSV/Excel formula injection
+
     const text = String(value).replace(/[^\d]/g, "");
 
     // Giữ số 0 đầu khi mở bằng Excel
+
     return `"=""${text}"""`;
   };
 
   const exportCSV = () => {
     const headers = [
       "Họ tên",
+
       "Email",
+
       "Số điện thoại",
+
       "MSSV",
+
       "Phòng",
+
       "Trạng thái",
+
       "Check-in lúc",
+
       "Check-in bởi",
+
       "Check-out lúc",
+
       "Check-out bởi",
+
       "Thời gian đăng ký",
     ];
 
@@ -336,10 +444,15 @@ function Dashboard() {
 
       return [
         csvEscape(participant.full_name),
+
         csvEscape(participant.email),
+
         csvTextNumber(participant.phone),
+
         csvTextNumber(participant.student_id),
+
         csvEscape(roomName(participant.room_id)),
+
         csvEscape(status),
 
         csvEscape(
@@ -371,15 +484,20 @@ function Dashboard() {
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
+
     link.href = url;
+
     link.download = `joinly-${event?.name ?? "participants"}.csv`;
 
     document.body.appendChild(link);
+
     link.click();
+
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
   };
+
   const roleLabel =
     role === "owner"
       ? "Owner"
@@ -388,6 +506,62 @@ function Dashboard() {
         : role === "manager"
           ? "Manager"
           : "";
+
+  // Người demo được thêm qua server; database vẫn áp dụng giới hạn gói hiện tại.
+  const addDemoPeople = async () => {
+    if (demoBusy || role !== "owner") return;
+
+    const roomId = demoRoomId || rooms[0]?.id;
+    if (!roomId || !Number.isInteger(demoCount) || demoCount < 1) {
+      toast.error("Hãy chọn phòng và nhập số lượng người hợp lệ.");
+      return;
+    }
+
+    setDemoBusy(true);
+    try {
+      const { data: auth, error: authError } = await supabase.auth.getSession();
+      if (authError || !auth.session?.access_token) {
+        throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+      }
+      const result = await addDemoOnServer({
+        data: { eventId: id, roomId, count: demoCount },
+        headers: { Authorization: `Bearer ${auth.session.access_token}` },
+      });
+      await reloadParticipants();
+      toast.success(`Đã thêm ${result.added} người demo. Còn ${result.remaining} suất.`);
+    } catch (error) {
+      console.error("Add demo participants error:", error);
+      toast.error(error instanceof Error ? error.message : "Không thể thêm người demo.");
+    } finally {
+      setDemoBusy(false);
+    }
+  };
+
+  const deleteDemoPeople = async () => {
+    if (demoBusy || role !== "owner") return;
+    if (!window.confirm("Xóa tất cả người demo được tạo bởi chức năng này trong sự kiện?")) {
+      return;
+    }
+
+    setDemoBusy(true);
+    try {
+      const { data: auth, error: authError } = await supabase.auth.getSession();
+      if (authError || !auth.session?.access_token) {
+        throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+      }
+      const result = await deleteDemoOnServer({
+        data: { eventId: id },
+        headers: { Authorization: `Bearer ${auth.session.access_token}` },
+      });
+      await reloadParticipants();
+      toast.success(`Đã xóa ${result.deleted} người demo.`);
+    } catch (error) {
+      console.error("Delete demo participants error:", error);
+      toast.error(error instanceof Error ? error.message : "Không thể xóa người demo.");
+    } finally {
+      setDemoBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -421,6 +595,8 @@ function Dashboard() {
     );
   }
 
+  const isFree = event.plan_code === "free";
+
   const activeFilterCount =
     (selectedParticipantRoomId !== "all" ? 1 : 0) + (selectedStatus !== "all" ? 1 : 0);
 
@@ -428,9 +604,12 @@ function Dashboard() {
     <div className="min-h-screen bg-secondary/30 px-4 py-12">
       <div className="mx-auto max-w-6xl">
         {/* QUAY LẠI */}
+
         <Link
           to="/manage-event/$id"
+
           params={{ id }}
+
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -438,6 +617,7 @@ function Dashboard() {
         </Link>
 
         {/* HEADER */}
+
         <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-3">
@@ -453,82 +633,181 @@ function Dashboard() {
             <p className="mt-1 text-sm text-muted-foreground">{event.name}</p>
           </div>
 
-          <Button variant="outline" onClick={exportCSV} disabled={total === 0}>
-            <Download className="mr-2 h-4 w-4" />
-            Xuất CSV
-          </Button>
-        </div>
-
-        {/* STAT CARDS */}
-        {/* STAT CARDS */}
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            icon={<Users className="h-5 w-5" />}
-            label="Tổng đăng ký"
-            value={String(total)}
-          />
-
-          <StatCard
-            icon={<CheckCircle2 className="h-5 w-5" />}
-            label="Đã check-in"
-            value={String(checkedInCount)}
-          />
-
-          <StatCard
-            icon={<Users className="h-5 w-5" />}
-            label="Chưa đến"
-            value={String(notArrivedCount)}
-          />
-
-          <StatCard
-            icon={<DoorOpen className="h-5 w-5" />}
-            label="Đã check-out"
-            value={String(checkedOutCount)}
-          />
-        </div>
-
-        {/* THEO PHÒNG */}
-        <div className="mt-6 rounded-2xl border border-border bg-card p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-display text-lg font-semibold">Theo phòng</h2>
-
-            <span className="text-sm text-muted-foreground">{total} người</span>
-          </div>
-
-          {/* THANH THỐNG KÊ */}
-          {breakdown.length === 0 ? (
-            <p className="mt-4 text-sm text-muted-foreground">Sự kiện chưa có phòng.</p>
-          ) : (
-            <div className="mt-6 space-y-4">
-              {breakdown.map(({ room, count }) => {
-                const percentage = total === 0 ? 0 : Math.round((count / total) * 100);
-
-                return (
-                  <div key={room.id}>
-                    <div className="flex items-center justify-between gap-4 text-sm">
-                      <span className="font-medium">{room.name}</span>
-
-                      <span className="text-muted-foreground">{count} người</span>
-                    </div>
-
-                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{
-                          width: `${percentage}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          {!isFree && (
+            <Button variant="outline" onClick={exportCSV} disabled={total === 0}>
+              <Download className="mr-2 h-4 w-4" />
+              Xuất CSV
+            </Button>
           )}
         </div>
 
+        {/* NGƯỜI DEMO - Owner, áp dụng mọi gói, vẫn chịu giới hạn người tham gia */}
+        {role === "owner" && (
+          <div className="mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4">
+            <label className="flex flex-col gap-1 text-sm">
+              Số người demo
+              <input
+                type="number"
+                min={1}
+                max={Math.min(
+                  700,
+                  Math.max(
+                    1,
+                    event.attendee_limit -
+                      new Set(participants.map((p) => p.email.trim().toLowerCase())).size,
+                  ),
+                )}
+                value={demoCount}
+                onChange={(e) => setDemoCount(e.target.value === "" ? 0 : Number(e.target.value))}
+                className="h-10 w-28 rounded-lg border border-border bg-background px-3"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm">
+              Chọn phòng
+              <select
+                value={demoRoomId || rooms[0]?.id || ""}
+                onChange={(e) => setDemoRoomId(e.target.value)}
+                className="h-10 min-w-40 rounded-lg border border-border bg-background px-3"
+              >
+                {rooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    {room.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <Button
+              type="button"
+              disabled={
+                demoBusy ||
+                rooms.length === 0 ||
+                demoCount < 1 ||
+                demoCount >
+                  Math.min(
+                    700,
+                    Math.max(
+                      0,
+                      event.attendee_limit -
+                        new Set(participants.map((p) => p.email.trim().toLowerCase())).size,
+                    ),
+                  ) ||
+                !Number.isInteger(demoCount)
+              }
+              onClick={() => void addDemoPeople()}
+            >
+              {demoBusy ? "Đang xử lý..." : "Thêm người demo"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled={demoBusy}
+              onClick={() => void deleteDemoPeople()}
+            >
+              Xóa người demo
+            </Button>
+
+            <p className="w-full text-xs text-muted-foreground">
+              Giới hạn {event.attendee_limit} người/sự kiện; còn tối đa{" "}
+              {Math.max(
+                0,
+                event.attendee_limit -
+                  new Set(participants.map((p) => p.email.trim().toLowerCase())).size,
+              )}{" "}
+              suất. Người demo cũng chiếm suất. Chỉ Owner được thao tác.
+            </p>
+          </div>
+        )}
+
+        {!isFree && (
+          <>
+            {/* STAT CARDS */}
+
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                icon={<Users className="h-5 w-5" />}
+
+                label="Tổng đăng ký"
+
+                value={String(total)}
+              />
+
+              <StatCard
+                icon={<CheckCircle2 className="h-5 w-5" />}
+
+                label="Đã check-in"
+
+                value={String(checkedInCount)}
+              />
+
+              <StatCard
+                icon={<Users className="h-5 w-5" />}
+
+                label="Chưa đến"
+
+                value={String(notArrivedCount)}
+              />
+
+              <StatCard
+                icon={<DoorOpen className="h-5 w-5" />}
+
+                label="Đã check-out"
+
+                value={String(checkedOutCount)}
+              />
+            </div>
+
+            {/* THEO PHÒNG */}
+
+            <div className="mt-6 rounded-2xl border border-border bg-card p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="font-display text-lg font-semibold">Theo phòng</h2>
+
+                <span className="text-sm text-muted-foreground">{total} người</span>
+              </div>
+
+              {/* THANH THỐNG KÊ */}
+
+              {breakdown.length === 0 ? (
+                <p className="mt-4 text-sm text-muted-foreground">Sự kiện chưa có phòng.</p>
+              ) : (
+                <div className="mt-6 space-y-4">
+                  {breakdown.map(({ room, count }) => {
+                    const percentage = total === 0 ? 0 : Math.round((count / total) * 100);
+
+                    return (
+                      <div key={room.id}>
+                        <div className="flex items-center justify-between gap-4 text-sm">
+                          <span className="font-medium">{room.name}</span>
+
+                          <span className="text-muted-foreground">{count} người</span>
+                        </div>
+
+                        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all"
+
+                            style={{
+                              width: `${percentage}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
         {/* DANH SÁCH NGƯỜI THAM GIA */}
+
         <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-card">
           {/* HEADER */}
+
           <div className="border-b border-border px-6 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -539,108 +818,124 @@ function Dashboard() {
                 </p>
               </div>
 
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              {!isFree && (
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Tìm tên, email, SĐT, MSSV..."
-                    className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring sm:w-[280px]"
-                  />
-                </div>
+                    <input
+                      type="text"
 
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button type="button" variant={activeFilterCount > 0 ? "default" : "outline"}>
-                      <Filter className="mr-2 h-4 w-4" />
-                      Bộ lọc
-                      {activeFilterCount > 0 && ` (${activeFilterCount})`}
-                    </Button>
-                  </PopoverTrigger>
+                      value={searchTerm}
 
-                  <PopoverContent align="end" className="w-80">
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="font-medium">Bộ lọc</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Lọc danh sách người tham gia.
-                        </p>
-                      </div>
+                      onChange={(e) => setSearchTerm(e.target.value)}
 
-                      {/* PHÒNG */}
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Phòng</p>
+                      placeholder="Tìm tên, email, SĐT, MSSV..."
 
-                        <Select
-                          value={selectedParticipantRoomId}
-                          onValueChange={setSelectedParticipantRoomId}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Chọn phòng" />
-                          </SelectTrigger>
+                      className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring sm:w-280px"
+                    />
+                  </div>
 
-                          <SelectContent>
-                            <SelectItem value="all">Tất cả phòng</SelectItem>
-
-                            {rooms.map((room) => (
-                              <SelectItem key={room.id} value={room.id}>
-                                {room.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* TRẠNG THÁI */}
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Trạng thái</p>
-
-                        <Select
-                          value={selectedStatus}
-                          onValueChange={(value) =>
-                            setSelectedStatus(
-                              value as "all" | "not_arrived" | "checked_in" | "checked_out",
-                            )
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Chọn trạng thái" />
-                          </SelectTrigger>
-
-                          <SelectContent>
-                            <SelectItem value="all">Tất cả trạng thái</SelectItem>
-
-                            <SelectItem value="not_arrived">Chưa đến</SelectItem>
-
-                            <SelectItem value="checked_in">Đã check-in</SelectItem>
-
-                            <SelectItem value="checked_out">Đã check-out</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => {
-                          setSelectedParticipantRoomId("all");
-                          setSelectedStatus("all");
-                        }}
-                      >
-                        Đặt lại bộ lọc
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant={activeFilterCount > 0 ? "default" : "outline"}>
+                        <Filter className="mr-2 h-4 w-4" />
+                        Bộ lọc
+                        {activeFilterCount > 0 && ` (${activeFilterCount})`}
                       </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
+                    </PopoverTrigger>
+
+                    <PopoverContent align="end" className="w-80">
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="font-medium">Bộ lọc</h3>
+
+                          <p className="text-sm text-muted-foreground">
+                            Lọc danh sách người tham gia.
+                          </p>
+                        </div>
+
+                        {/* PHÒNG */}
+
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Phòng</p>
+
+                          <Select
+                            value={selectedParticipantRoomId}
+
+                            onValueChange={setSelectedParticipantRoomId}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Chọn phòng" />
+                            </SelectTrigger>
+
+                            <SelectContent>
+                              <SelectItem value="all">Tất cả phòng</SelectItem>
+
+                              {rooms.map((room) => (
+                                <SelectItem key={room.id} value={room.id}>
+                                  {room.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* TRẠNG THÁI */}
+
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Trạng thái</p>
+
+                          <Select
+                            value={selectedStatus}
+
+                            onValueChange={(value) =>
+                              setSelectedStatus(
+                                value as "all" | "not_arrived" | "checked_in" | "checked_out",
+                              )
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Chọn trạng thái" />
+                            </SelectTrigger>
+
+                            <SelectContent>
+                              <SelectItem value="all">Tất cả trạng thái</SelectItem>
+
+                              <SelectItem value="not_arrived">Chưa đến</SelectItem>
+
+                              <SelectItem value="checked_in">Đã check-in</SelectItem>
+
+                              <SelectItem value="checked_out">Đã check-out</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <Button
+                          type="button"
+
+                          variant="outline"
+
+                          className="w-full"
+
+                          onClick={() => {
+                            setSelectedParticipantRoomId("all");
+
+                            setSelectedStatus("all");
+                          }}
+                        >
+                          Đặt lại bộ lọc
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
             </div>
           </div>
 
           {/* SỐ NGƯỜI ĐANG HIỂN THỊ */}
+
           <div className="border-b border-border px-6 py-3 text-sm text-muted-foreground">
             Đang hiển thị{" "}
             <span className="font-medium text-foreground">{filteredParticipants.length}</span> /{" "}
@@ -664,12 +959,18 @@ function Dashboard() {
               {total > 0 && (
                 <Button
                   type="button"
+
                   variant="outline"
+
                   size="sm"
+
                   className="mt-4"
+
                   onClick={() => {
                     setSearchTerm("");
+
                     setSelectedParticipantRoomId("all");
+
                     setSelectedStatus("all");
                   }}
                 >
@@ -690,8 +991,11 @@ function Dashboard() {
 
                         <button
                           type="button"
+
                           onClick={() => setShowEmail((current) => !current)}
+
                           className="text-muted-foreground hover:text-foreground"
+
                           title={showEmail ? "Ẩn Email" : "Hiện Email"}
                         >
                           {showEmail ? (
@@ -709,8 +1013,11 @@ function Dashboard() {
 
                         <button
                           type="button"
+
                           onClick={() => setShowPhone((current) => !current)}
+
                           className="text-muted-foreground hover:text-foreground"
+
                           title={showPhone ? "Ẩn SĐT" : "Hiện SĐT"}
                         >
                           {showPhone ? (
@@ -728,8 +1035,11 @@ function Dashboard() {
 
                         <button
                           type="button"
+
                           onClick={() => setShowStudentId((current) => !current)}
+
                           className="text-muted-foreground hover:text-foreground"
+
                           title={showStudentId ? "Ẩn MSSV" : "Hiện MSSV"}
                         >
                           {showStudentId ? (

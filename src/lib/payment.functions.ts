@@ -194,7 +194,7 @@ export const createPayment = createServerFn({
               p_user_id: context.userId,
               p_plan_code: plan.code,
               p_order_code: orderCode,
-              p_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+              p_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
             },
           );
           if (!error) {

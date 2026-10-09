@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Sparkles, Calendar, MapPin, Loader2, DoorOpen, Lock, ArrowRight } from "lucide-react";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getJoined, setJoined } from "@/lib/joined-events";
-import { registerParticipant } from "@/lib/confirmation.functions";
+import { registerParticipant, checkRegistrationSlots } from "@/lib/confirmation.functions";
 import { verifyRoomAccessCode } from "@/lib/room-access.functions";
 
 export const Route = createFileRoute("/join/$id/$roomId")({
@@ -25,18 +25,21 @@ type EventRow = {
 };
 type RoomRow = { id: string; name: string; event_id: string; has_access_code: boolean };
 
-type Step = "code" | "confirm" | "form" | "not_allowed";
+type Step = "code" | "confirm" | "form" | "not_allowed" | "full";
 
 function JoinRoomPage() {
   const { id, roomId } = useParams({ from: "/join/$id/$roomId" });
   const navigate = useNavigate();
   const register = useServerFn(registerParticipant);
+  const checkSlots = useServerFn(checkRegistrationSlots);
+  const [checkingSlots, setCheckingSlots] = useState(false);
   const verifyCode = useServerFn(verifyRoomAccessCode);
   const [event, setEvent] = useState<EventRow | null>(null);
   const [room, setRoom] = useState<RoomRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>("confirm");
   const [submitting, setSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
   const [checkingCode, setCheckingCode] = useState(false);
   const [accessCode, setAccessCode] = useState("");
   const [codeVerified, setCodeVerified] = useState<string | null>(null);
@@ -98,6 +101,32 @@ function JoinRoomPage() {
     }
   };
 
+  const onCheckSlots = async () => {
+    if (checkingSlots) return;
+
+    setCheckingSlots(true);
+
+    try {
+      const result = await checkSlots({
+        data: { eventId: id, roomId },
+      });
+
+      if (result.status === "available") {
+        setStep("form");
+      } else if (result.status === "full") {
+        setStep("full");
+      } else if (result.status === "not_active") {
+        toast.error("Sự kiện chưa được kích hoạt hoặc đã đóng đăng ký.");
+      } else {
+        toast.error("Phòng hoặc sự kiện không hợp lệ.");
+      }
+    } catch {
+      toast.error("Không thể kiểm tra suất tham gia. Vui lòng thử lại.");
+    } finally {
+      setCheckingSlots(false);
+    }
+  };
+
   const resetParticipantForm = () => {
     setName("");
     setEmail("");
@@ -108,6 +137,9 @@ function JoinRoomPage() {
   };
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Chặn gửi đồng thời nhiều yêu cầu đăng ký
+    if (submitLockRef.current) return;
     const trimmedEmail = email.trim();
     const trimmedPhone = phone.trim();
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmedEmail);
@@ -119,9 +151,26 @@ function JoinRoomPage() {
       toast.error("Số điện thoại chỉ được chứa chữ số.");
       return;
     }
+    submitLockRef.current = true;
     setSubmitting(true);
     let result;
     try {
+      const availability = await checkSlots({
+        data: { eventId: id, roomId },
+      });
+
+      if (availability.status === "full") {
+        setSubmitting(false);
+        setStep("full");
+        return;
+      }
+
+      if (availability.status !== "available") {
+        setSubmitting(false);
+        toast.error("Sự kiện hoặc phòng hiện không thể nhận đăng ký.");
+        return;
+      }
+
       result = await register({
         data: {
           eventId: id,
@@ -134,11 +183,12 @@ function JoinRoomPage() {
         },
       });
     } catch {
-      setSubmitting(false);
       toast.error("Không thể đăng ký. Vui lòng thử lại.");
       return;
+    } finally {
+      submitLockRef.current = false;
+      setSubmitting(false);
     }
-    setSubmitting(false);
     if (result.status === "invalid") {
       toast.error("Phòng không hợp lệ.");
       return;
@@ -155,9 +205,8 @@ function JoinRoomPage() {
     }
 
     if (result.status === "full") {
-      toast.error("Sự kiện đã đủ số lượng người tham gia. Vui lòng liên hệ ban tổ chức.", {
-        duration: 6000,
-      });
+      setStep("full");
+      toast.error("Sự kiện đã đủ số lượng người tham gia. Vui lòng liên hệ ban tổ chức.");
       return;
     }
 
@@ -276,15 +325,44 @@ function JoinRoomPage() {
                   Vui lòng kiểm tra kỹ thông tin phòng trước khi tiếp tục để tránh đăng ký nhầm.
                 </p>
               </div>
-              <Button type="button" size="lg" className="w-full" onClick={() => setStep("form")}>
-                Xác nhận tham gia
-                <ArrowRight className="h-4 w-4" />
+              <Button
+                type="button"
+                size="lg"
+                className="w-full"
+                onClick={() => void onCheckSlots()}
+                disabled={checkingSlots}
+              >
+                {checkingSlots && <Loader2 className="h-4 w-4 animate-spin" />}
+                {checkingSlots ? "Đang kiểm tra suất..." : "Xác nhận tham gia"}
+                {!checkingSlots && <ArrowRight className="h-4 w-4" />}
               </Button>
               {room.has_access_code && codeVerified && (
                 <p className="text-center text-xs text-muted-foreground">Đã xác thực mã phòng.</p>
               )}
             </div>
           )}
+
+          {step === "full" && (
+            <div className="mt-6 space-y-4 text-center">
+              <h2 className="text-xl font-semibold">Sự kiện đã hết suất tham gia</h2>
+
+              <p className="text-sm text-muted-foreground">
+                Sự kiện đã đủ số người đăng ký. Vui lòng liên hệ ban tổ chức hoặc thử lại sau.
+              </p>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full"
+                disabled={checkingSlots}
+                onClick={() => void onCheckSlots()}
+              >
+                {checkingSlots ? "Đang kiểm tra..." : "Kiểm tra lại số suất"}
+              </Button>
+            </div>
+          )}
+
           {step === "not_allowed" && (
             <div className="mt-6 space-y-4">
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-center">

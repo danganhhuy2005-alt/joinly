@@ -49,11 +49,20 @@ export const Route = createFileRoute("/_authenticated/my-events")({
   head: () => ({ meta: [{ title: "Sự kiện của tôi — Joinly" }] }),
   component: MyEvents,
 });
+type MonthlyInfo = {
+  subscription_id: string;
+  expires_at: string;
+  event_limit: number;
+  events_used: number;
+  events_remaining: number;
+};
 
 function MyEvents() {
   const [events, setEvents] = useState<EventWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [clubName, setClubName] = useState<string>("");
+  const [monthlyInfo, setMonthlyInfo] = useState<MonthlyInfo | null>(null);
+  const [monthlyError, setMonthlyError] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -70,13 +79,16 @@ function MyEvents() {
 
     if (!user) return;
 
-    const [{ data: ev }, { data: prof }] = await Promise.all([
-      supabase.from("events").select("*").order("created_at", {
-        ascending: false,
-      }),
+    const [{ data: ev }, { data: prof }, { data: monthlyRows, error: monthlyErr }] =
+      await Promise.all([
+        supabase.from("events").select("*").order("created_at", { ascending: false }),
 
-      supabase.from("profiles").select("club_name, full_name").eq("id", user.id).maybeSingle(),
-    ]);
+        supabase.from("profiles").select("club_name, full_name").eq("id", user.id).maybeSingle(),
+
+        supabase.rpc("get_active_monthly_subscription", {
+          p_user_id: user.id,
+        }),
+      ]);
 
     const baseEvents = (ev as EventRow[] | null) ?? [];
 
@@ -98,6 +110,8 @@ function MyEvents() {
     setEvents(eventsWithRole.filter((event): event is EventWithRole => event !== null));
 
     setClubName(prof?.club_name ?? prof?.full_name ?? user.email ?? "");
+    setMonthlyInfo(monthlyErr ? null : (monthlyRows?.[0] ?? null));
+    setMonthlyError(Boolean(monthlyErr));
 
     setLoading(false);
   };
@@ -234,6 +248,77 @@ function MyEvents() {
             </Button>
           </div>
         </div>
+
+        {!loading && (
+          <section className="mt-6 rounded-2xl border border-border bg-card p-5">
+            {monthlyError ? (
+              <p className="text-sm text-destructive">Không thể tải thông tin gói Monthly.</p>
+            ) : monthlyInfo ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-lg font-semibold">👑 Gói Monthly</h2>
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                    Đang hoạt động
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-secondary p-3">
+                    <p className="text-xs text-muted-foreground">Tổng suất</p>
+                    <p className="text-2xl font-bold">{monthlyInfo.event_limit}</p>
+                  </div>
+
+                  <div className="rounded-xl bg-secondary p-3">
+                    <p className="text-xs text-muted-foreground">Đã dùng</p>
+                    <p className="text-2xl font-bold">{monthlyInfo.events_used}</p>
+                  </div>
+
+                  <div className="rounded-xl bg-secondary p-3">
+                    <p className="text-xs text-muted-foreground">Còn lại</p>
+                    <p className="text-2xl font-bold text-primary">
+                      {monthlyInfo.events_remaining}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{
+                      width: `${
+                        monthlyInfo.event_limit > 0
+                          ? Math.min(100, (monthlyInfo.events_used / monthlyInfo.event_limit) * 100)
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+
+                <div className="flex flex-wrap justify-between gap-2 text-sm text-muted-foreground">
+                  <span>
+                    Hết hạn: {new Date(monthlyInfo.expires_at).toLocaleDateString("vi-VN")}
+                  </span>
+                  <span>Tối đa 500 người/sự kiện</span>
+                </div>
+
+                {monthlyInfo.events_remaining === 0 && (
+                  <p className="text-sm text-amber-500">
+                    Bạn đã sử dụng hết số suất Monthly trong chu kỳ này.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Bạn chưa có gói Monthly đang hoạt động.
+                </p>
+                <Link to="/plans" className="text-sm font-semibold text-primary hover:underline">
+                  Xem gói Monthly
+                </Link>
+              </div>
+            )}
+          </section>
+        )}
 
         {!loading && isDraftLimitReached && (
           <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">

@@ -212,6 +212,8 @@ function MonthlyCheckout() {
                     className="mx-auto w-full max-w-72 rounded-xl"
                   />
 
+                  <PaymentQrDownloadButton paymentId={order.id} />
+
                   <div className="space-y-3 text-left">
                     {[
                       {

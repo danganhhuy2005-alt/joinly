@@ -308,9 +308,16 @@ function CheckInPage() {
         {
           fps: 10,
 
-          qrbox: {
-            width: 250,
-            height: 250,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const size = Math.min(
+              250,
+              Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8),
+            );
+
+            return {
+              width: size,
+              height: size,
+            };
           },
         },
 
@@ -389,7 +396,7 @@ function CheckInPage() {
   }
 
   return (
-    <div className="min-h-screen bg-secondary/30 px-4 py-10">
+    <div className="min-h-screen bg-secondary/30 px-3 py-5 sm:px-4 sm:py-10">
       <div className="mx-auto max-w-2xl">
         <Link
           to="/manage-event/$id"
@@ -401,7 +408,7 @@ function CheckInPage() {
         </Link>
 
         <div className="mt-6">
-          <h1 className="font-display text-3xl font-bold">Check-in / Check-out</h1>
+          <h1 className="font-display text-2xl font-bold sm:text-3xl">Check-in / Check-out</h1>
 
           <p className="mt-1 text-sm text-muted-foreground">
             Quét QR vé cá nhân của người tham gia.
@@ -433,7 +440,7 @@ function CheckInPage() {
 
         {/* CAMERA */}
         <div className="mt-5 overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="border-b border-border px-5 py-4">
+          <div className="border-b border-border px-3 py-4 sm:px-5">
             <div className="flex items-center gap-2">
               <Camera className="h-4 w-4 text-primary" />
 
@@ -443,8 +450,11 @@ function CheckInPage() {
             </div>
           </div>
 
-          <div className="p-5">
-            <div id={READER_ID} className="mx-auto w-full overflow-hidden rounded-xl bg-black" />
+          <div className="min-w-0 p-3 sm:p-5">
+            <div
+              id={READER_ID}
+              className="mx-auto w-full min-w-0 overflow-hidden rounded-xl bg-black"
+            />
 
             {!cameraRunning && !result && (
               <div className="py-12 text-center">
@@ -454,7 +464,7 @@ function CheckInPage() {
 
                 <Button
                   type="button"
-                  className="mt-4"
+                  className="mt-4 h-12 w-full sm:w-auto"
                   disabled={startingCamera}
                   onClick={() => void startScanner()}
                 >
@@ -507,7 +517,11 @@ function CheckInPage() {
                   </div>
                 )}
 
-                <Button type="button" className="mt-4" onClick={() => void scanNext()}>
+                <Button
+                  type="button"
+                  className="mt-4 h-12 w-full sm:w-auto"
+                  onClick={() => void scanNext()}
+                >
                   <RefreshCw className="h-4 w-4" />
                   Quét người tiếp theo
                 </Button>

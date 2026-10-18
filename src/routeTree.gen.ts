@@ -19,6 +19,7 @@ import { Route as AuthenticatedMonthlyCheckoutRouteImport } from './routes/_auth
 import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
 import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/plans'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as FeedbackFormIdRouteImport } from './routes/feedback.$formId'
 import { Route as JoinIdRouteImport } from './routes/join.$id'
 import { Route as AuthenticatedCheckInIdRouteImport } from './routes/_authenticated/check-in.$id'
 import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
@@ -28,6 +29,7 @@ import { Route as AuthenticatedManageEventIdRouteImport } from './routes/_authen
 import { Route as ApiSepayWebhookRouteImport } from './routes/api.sepay.webhook'
 import { Route as JoinIdIndexRouteImport } from './routes/join.$id.index'
 import { Route as JoinIdRoomIdRouteImport } from './routes/join.$id.$roomId'
+import { Route as AuthenticatedDashboardIdFeedbackRouteImport } from './routes/_authenticated/dashboard_.$id.feedback'
 import { Route as AuthenticatedDashboardIdMembersRouteImport } from './routes/_authenticated/dashboard_.$id.members'
 import { Route as JoinIdConfirmTokenRouteImport } from './routes/join.$id.confirm.$token'
 import { Route as AuthenticatedDashboardIdAllowlistTsxRouteImport } from './routes/_authenticated/dashboard_.$id.allowlist.tsx'
@@ -83,6 +85,11 @@ const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const FeedbackFormIdRoute = FeedbackFormIdRouteImport.update({
+  id: '/feedback/$formId',
+  path: '/feedback/$formId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const JoinIdRoute = JoinIdRouteImport.update({
   id: '/join/$id',
   path: '/join/$id',
@@ -131,6 +138,12 @@ const JoinIdRoomIdRoute = JoinIdRoomIdRouteImport.update({
   path: '/$roomId',
   getParentRoute: () => JoinIdRoute,
 } as any)
+const AuthenticatedDashboardIdFeedbackRoute =
+  AuthenticatedDashboardIdFeedbackRouteImport.update({
+    id: '/dashboard_/$id/feedback',
+    path: '/dashboard/$id/feedback',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardIdMembersRoute =
   AuthenticatedDashboardIdMembersRouteImport.update({
     id: '/dashboard_/$id/members',
@@ -159,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/plans': typeof AuthenticatedPlansRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/feedback/$formId': typeof FeedbackFormIdRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -168,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id/': typeof JoinIdIndexRoute
+  '/dashboard/$id/feedback': typeof AuthenticatedDashboardIdFeedbackRoute
   '/dashboard/$id/members': typeof AuthenticatedDashboardIdMembersRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
   '/dashboard/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
@@ -182,6 +197,7 @@ export interface FileRoutesByTo {
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/plans': typeof AuthenticatedPlansRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/feedback/$formId': typeof FeedbackFormIdRoute
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
@@ -190,6 +206,7 @@ export interface FileRoutesByTo {
   '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id': typeof JoinIdIndexRoute
+  '/dashboard/$id/feedback': typeof AuthenticatedDashboardIdFeedbackRoute
   '/dashboard/$id/members': typeof AuthenticatedDashboardIdMembersRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
   '/dashboard/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
@@ -206,6 +223,7 @@ export interface FileRoutesById {
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
   '/_authenticated/plans': typeof AuthenticatedPlansRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/feedback/$formId': typeof FeedbackFormIdRoute
   '/join/$id': typeof JoinIdRouteWithChildren
   '/_authenticated/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -215,6 +233,7 @@ export interface FileRoutesById {
   '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id/': typeof JoinIdIndexRoute
+  '/_authenticated/dashboard_/$id/feedback': typeof AuthenticatedDashboardIdFeedbackRoute
   '/_authenticated/dashboard_/$id/members': typeof AuthenticatedDashboardIdMembersRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
   '/_authenticated/dashboard_/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
@@ -231,6 +250,7 @@ export interface FileRouteTypes {
     | '/my-events'
     | '/plans'
     | '/profile'
+    | '/feedback/$formId'
     | '/join/$id'
     | '/check-in/$id'
     | '/dashboard/$id'
@@ -240,6 +260,7 @@ export interface FileRouteTypes {
     | '/api/sepay/webhook'
     | '/join/$id/$roomId'
     | '/join/$id/'
+    | '/dashboard/$id/feedback'
     | '/dashboard/$id/members'
     | '/join/$id/confirm/$token'
     | '/dashboard/$id/allowlist/tsx'
@@ -254,6 +275,7 @@ export interface FileRouteTypes {
     | '/my-events'
     | '/plans'
     | '/profile'
+    | '/feedback/$formId'
     | '/check-in/$id'
     | '/dashboard/$id'
     | '/edit-event/$id'
@@ -262,6 +284,7 @@ export interface FileRouteTypes {
     | '/api/sepay/webhook'
     | '/join/$id/$roomId'
     | '/join/$id'
+    | '/dashboard/$id/feedback'
     | '/dashboard/$id/members'
     | '/join/$id/confirm/$token'
     | '/dashboard/$id/allowlist/tsx'
@@ -277,6 +300,7 @@ export interface FileRouteTypes {
     | '/_authenticated/my-events'
     | '/_authenticated/plans'
     | '/_authenticated/profile'
+    | '/feedback/$formId'
     | '/join/$id'
     | '/_authenticated/check-in/$id'
     | '/_authenticated/dashboard/$id'
@@ -286,6 +310,7 @@ export interface FileRouteTypes {
     | '/api/sepay/webhook'
     | '/join/$id/$roomId'
     | '/join/$id/'
+    | '/_authenticated/dashboard_/$id/feedback'
     | '/_authenticated/dashboard_/$id/members'
     | '/join/$id/confirm/$token'
     | '/_authenticated/dashboard_/$id/allowlist/tsx'
@@ -297,6 +322,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermsRoute: typeof TermsRoute
+  FeedbackFormIdRoute: typeof FeedbackFormIdRoute
   JoinIdRoute: typeof JoinIdRouteWithChildren
   ApiSepayWebhookRoute: typeof ApiSepayWebhookRoute
 }
@@ -373,6 +399,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/feedback/$formId': {
+      id: '/feedback/$formId'
+      path: '/feedback/$formId'
+      fullPath: '/feedback/$formId'
+      preLoaderRoute: typeof FeedbackFormIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/join/$id': {
       id: '/join/$id'
       path: '/join/$id'
@@ -436,6 +469,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JoinIdRoomIdRouteImport
       parentRoute: typeof JoinIdRoute
     }
+    '/_authenticated/dashboard_/$id/feedback': {
+      id: '/_authenticated/dashboard_/$id/feedback'
+      path: '/dashboard/$id/feedback'
+      fullPath: '/dashboard/$id/feedback'
+      preLoaderRoute: typeof AuthenticatedDashboardIdFeedbackRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard_/$id/members': {
       id: '/_authenticated/dashboard_/$id/members'
       path: '/dashboard/$id/members'
@@ -471,6 +511,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedEditEventIdRoute: typeof AuthenticatedEditEventIdRoute
   AuthenticatedEventIdRoute: typeof AuthenticatedEventIdRoute
   AuthenticatedManageEventIdRoute: typeof AuthenticatedManageEventIdRoute
+  AuthenticatedDashboardIdFeedbackRoute: typeof AuthenticatedDashboardIdFeedbackRoute
   AuthenticatedDashboardIdMembersRoute: typeof AuthenticatedDashboardIdMembersRoute
   AuthenticatedDashboardIdAllowlistTsxRoute: typeof AuthenticatedDashboardIdAllowlistTsxRoute
 }
@@ -486,6 +527,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEditEventIdRoute: AuthenticatedEditEventIdRoute,
   AuthenticatedEventIdRoute: AuthenticatedEventIdRoute,
   AuthenticatedManageEventIdRoute: AuthenticatedManageEventIdRoute,
+  AuthenticatedDashboardIdFeedbackRoute: AuthenticatedDashboardIdFeedbackRoute,
   AuthenticatedDashboardIdMembersRoute: AuthenticatedDashboardIdMembersRoute,
   AuthenticatedDashboardIdAllowlistTsxRoute:
     AuthenticatedDashboardIdAllowlistTsxRoute,
@@ -515,6 +557,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   TermsRoute: TermsRoute,
+  FeedbackFormIdRoute: FeedbackFormIdRoute,
   JoinIdRoute: JoinIdRouteWithChildren,
   ApiSepayWebhookRoute: ApiSepayWebhookRoute,
 }

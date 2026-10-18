@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BarChart3,
   Calendar,
+  ClipboardList,
   DoorOpen,
   Loader2,
   MapPin,
@@ -242,7 +243,7 @@ function ManageEvent() {
   // Khi mở lại (kể cả reload/trở lại từ trang khác), lấy đúng đơn cũ và
   // gọi createPayment cùng plan để server TÁI SỬ DỤNG order_code/số tiền.
   useEffect(() => {
-    if (!billingOpen || !event || role !== "owner") return;
+    if (!billingOpen || !event?.id || role !== "owner") return;
 
     let cancelled = false;
     const restoreOldOrder = async () => {
@@ -713,6 +714,13 @@ function ManageEvent() {
               <Link to="/dashboard/$id" params={{ id }}>
                 <BarChart3 className="h-4 w-4" />
                 Dashboard
+              </Link>
+            </Button>
+
+            <Button variant="outline" asChild>
+              <Link to="/dashboard/$id/feedback" params={{ id }}>
+                <ClipboardList className="h-4 w-4" />
+                Quản lý Feedback
               </Link>
             </Button>
 

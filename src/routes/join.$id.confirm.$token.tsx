@@ -106,7 +106,7 @@ function ConfirmationPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-secondary/40 px-4 py-12">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md md:max-w-3xl">
         <div className="mb-6 flex items-center justify-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
             <Sparkles className="h-4 w-4" strokeWidth={2.5} />
@@ -114,7 +114,7 @@ function ConfirmationPage() {
           <span className="font-display text-xl font-bold">Joinly</span>
         </div>
         <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
-          <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Check className="h-6 w-6" />
           </div>
           <h1 className="mt-4 text-center font-display text-xl font-bold leading-tight">
@@ -127,9 +127,9 @@ function ConfirmationPage() {
             ref={ticketRef}
             className="mt-6 overflow-hidden rounded-2xl border border-border bg-white text-slate-900"
           >
-            <div className="grid md:grid-cols-[1fr_220px]">
+            <div className="grid md:grid-cols-[minmax(0,1fr)_240px]">
               {/* THÔNG TIN VÉ */}
-              <div className="p-6">
+              <div className="min-w-0 p-6 md:p-8">
                 <div className="flex items-center gap-2">
                   <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
                     <Sparkles className="h-4 w-4" strokeWidth={2.5} />
@@ -260,7 +260,7 @@ function ConfirmationPage() {
           </p>
         </div>
       </div>
-      <div className="fixed -left-[9999px] top-0">
+      <div className="fixed left-[-9999px] top-0">
         <div
           ref={ticketRef}
           className="bg-white text-slate-900"

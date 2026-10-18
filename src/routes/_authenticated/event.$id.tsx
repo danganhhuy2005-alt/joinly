@@ -16,6 +16,14 @@ import {
   Lock,
   LockOpen,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -140,7 +148,7 @@ function RoomCard({
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+    <div className="w-full min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
       <div className="flex items-center gap-2">
         <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary-soft text-primary">
           <DoorOpen className="h-4 w-4" />
@@ -149,30 +157,70 @@ function RoomCard({
       </div>
       <p className="mt-1 text-xs text-muted-foreground">Quét mã QR để tham gia phòng này</p>
 
-      <div className="mt-4 flex justify-center">
-        <div className="rounded-xl border border-border bg-white p-3">
-          <>
-            <QRCodeSVG
-              value={joinUrl}
-              size={240}
-              marginSize={2}
-              level="M"
-              title={`QR tham gia phòng ${room.name}`}
-            />
-
-            {canEditCode && (
-              <QRCodeCanvas
-                ref={qrCanvasRef}
-                value={joinUrl}
-                size={960}
-                marginSize={4}
-                level="M"
-                style={{ display: "none" }}
-              />
-            )}
-          </>
+      {/* QR hiển thị vừa khung trên mọi thiết bị */}
+      <div className="mt-4 flex w-full min-w-0 justify-center">
+        <div className="flex w-full max-w-68 items-center justify-center rounded-2xl border border-border bg-white p-3">
+          <QRCodeSVG
+            value={joinUrl}
+            size={240}
+            marginSize={2}
+            level="M"
+            className="block h-auto w-full max-w-60"
+            title={`QR tham gia phòng ${room.name}`}
+          />
         </div>
       </div>
+
+      {/* QR độ phân giải cao dùng để tải PNG */}
+      {canEditCode && joinUrl && (
+        <QRCodeCanvas
+          ref={qrCanvasRef}
+          value={joinUrl}
+          size={960}
+          marginSize={4}
+          level="M"
+          style={{ display: "none" }}
+        />
+      )}
+
+      {/* Nút xem QR lớn trên điện thoại */}
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 w-full sm:hidden"
+            disabled={!joinUrl}
+          >
+            <QrCode className="mr-2 h-4 w-4" />
+            Xem mã QR lớn
+          </Button>
+        </DialogTrigger>
+
+        <DialogContent className="w-[calc(100vw-32px)] max-w-sm rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="pr-6 text-center">QR phòng {room.name}</DialogTitle>
+
+            <DialogDescription className="text-center">
+              Quét mã QR để đăng ký tham gia phòng này
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mx-auto flex w-full max-w-[320px] items-center justify-center rounded-2xl bg-white p-3">
+            <QRCodeSVG
+              value={joinUrl}
+              size={300}
+              marginSize={2}
+              level="M"
+              className="block h-auto w-full max-w-75"
+            />
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Người tham gia có thể dùng camera để quét mã
+          </p>
+        </DialogContent>
+      </Dialog>
       {canEditCode && joinUrl && (
         <QRCodeCanvas
           ref={qrCanvasRef}
@@ -198,7 +246,7 @@ function RoomCard({
       )}
 
       <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-secondary/50 p-2">
-        <code className="flex-1 truncate px-2 text-left text-xs">{joinUrl}</code>
+        <code className="min-w-0 flex-1 truncate px-2 text-left text-xs">{joinUrl}</code>
         <Button size="sm" variant="outline" onClick={copy}>
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </Button>
@@ -366,7 +414,7 @@ function EventRoom() {
               Sự kiện này chưa có phòng nào.
             </div>
           ) : (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {rooms.map((r) => (
                 <RoomCard
                   key={r.id}

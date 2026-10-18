@@ -190,9 +190,7 @@ function MonthlyCheckout() {
 
               {status === "pending" && !expired ? (
                 <>
-                  <p className="text-sm text-muted-foreground">
-                    Đang chờ thanh toán · Kiểm tra mỗi 5 giây
-                  </p>
+                  <p className="text-sm text-muted-foreground">Đang chờ thanh toán </p>
 
                   <div className="rounded-xl bg-secondary/50 p-4">
                     <p className="text-sm text-muted-foreground">Thời gian thanh toán còn lại</p>

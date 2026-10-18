@@ -853,7 +853,7 @@ function Dashboard() {
 
                       placeholder="Tìm tên, email, SĐT, MSSV..."
 
-                      className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring sm:w-280px"
+                      className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring sm:w-70"
                     />
                   </div>
 
@@ -1000,146 +1000,258 @@ function Dashboard() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-1000px text-sm">
-                <thead className="bg-secondary/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">Họ tên</th>
+            <>
+              {/* Danh sách dành cho điện thoại */}
+              <div className="space-y-3 p-3 lg:hidden">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-pressed={showEmail}
+                    onClick={() => setShowEmail((v) => !v)}
+                  >
+                    {showEmail ? (
+                      <EyeOff className="mr-1.5 h-4 w-4" />
+                    ) : (
+                      <Eye className="mr-1.5 h-4 w-4" />
+                    )}
+                    Email
+                  </Button>
 
-                    <th className="px-5 py-3 font-medium">
-                      <div className="flex items-center gap-2">
-                        <span>Email</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-pressed={showPhone}
+                    onClick={() => setShowPhone((v) => !v)}
+                  >
+                    {showPhone ? (
+                      <EyeOff className="mr-1.5 h-4 w-4" />
+                    ) : (
+                      <Eye className="mr-1.5 h-4 w-4" />
+                    )}
+                    SĐT
+                  </Button>
 
-                        <button
-                          type="button"
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-pressed={showStudentId}
+                    onClick={() => setShowStudentId((v) => !v)}
+                  >
+                    {showStudentId ? (
+                      <EyeOff className="mr-1.5 h-4 w-4" />
+                    ) : (
+                      <Eye className="mr-1.5 h-4 w-4" />
+                    )}
+                    MSSV
+                  </Button>
+                </div>
 
-                          onClick={() => setShowEmail((current) => !current)}
+                {filteredParticipants.map((participant) => {
+                  const checkedOut = Boolean(participant.checked_out_at);
+                  const checkedIn = Boolean(participant.checked_in_at || participant.checked_in);
 
-                          className="text-muted-foreground hover:text-foreground"
+                  return (
+                    <div
+                      key={participant.id}
+                      className="rounded-xl border border-border bg-background p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="wrap-break-word font-semibold">{participant.full_name}</p>
 
-                          title={showEmail ? "Ẩn Email" : "Hiện Email"}
+                          <p className="mt-1 wrap-break-word text-xs text-muted-foreground">
+                            {roomName(participant.room_id)}
+                          </p>
+                        </div>
+
+                        <span
+                          className={
+                            checkedOut
+                              ? "shrink-0 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700"
+                              : checkedIn
+                                ? "shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700"
+                                : "shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-medium text-muted-foreground"
+                          }
                         >
-                          {showEmail ? (
-                            <EyeOff className="h-3.5 w-3.5" />
-                          ) : (
-                            <Eye className="h-3.5 w-3.5" />
-                          )}
-                        </button>
+                          {checkedOut ? "Đã check-out" : checkedIn ? "Đã check-in" : "Chưa đến"}
+                        </span>
                       </div>
-                    </th>
 
-                    <th className="px-5 py-3 font-medium">
-                      <div className="flex items-center gap-2">
-                        <span>SĐT</span>
+                      <dl className="mt-3 grid grid-cols-[55px_minmax(0,1fr)] gap-x-3 gap-y-2 border-t border-border pt-3 text-sm">
+                        <dt className="text-muted-foreground">Email</dt>
+                        <dd className="min-w-0 break-all">
+                          {showEmail ? participant.email : "••••••••••"}
+                        </dd>
 
-                        <button
-                          type="button"
+                        <dt className="text-muted-foreground">SĐT</dt>
+                        <dd className="min-w-0 wrap-break-word">
+                          {showPhone ? participant.phone || "—" : "••••••••••"}
+                        </dd>
 
-                          onClick={() => setShowPhone((current) => !current)}
+                        <dt className="text-muted-foreground">MSSV</dt>
+                        <dd className="min-w-0 wrap-break-word">
+                          {showStudentId ? participant.student_id || "—" : "••••••••"}
+                        </dd>
+                      </dl>
 
-                          className="text-muted-foreground hover:text-foreground"
+                      {(checkedOut || checkedIn) && (
+                        <p className="mt-3 wrap-break-word border-t border-border pt-3 text-xs text-muted-foreground">
+                          {checkedOut
+                            ? `Check-out: ${formatDateTime(participant.checked_out_at)} · Bởi: ${operatorName(participant.checked_out_by)}`
+                            : `${participant.checked_in_at ? `Check-in: ${formatDateTime(participant.checked_in_at)} · ` : ""}Bởi: ${operatorName(participant.checked_in_by)}`}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
 
-                          title={showPhone ? "Ẩn SĐT" : "Hiện SĐT"}
-                        >
-                          {showPhone ? (
-                            <EyeOff className="h-3.5 w-3.5" />
-                          ) : (
-                            <Eye className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      </div>
-                    </th>
+              {/* Bảng dành cho máy tính */}
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full min-w-250 text-sm">
+                  <thead className="bg-secondary/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-5 py-3 font-medium">Họ tên</th>
 
-                    <th className="px-5 py-3 font-medium">
-                      <div className="flex items-center gap-2">
-                        <span>MSSV</span>
+                      <th className="px-5 py-3 font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>Email</span>
 
-                        <button
-                          type="button"
+                          <button
+                            type="button"
 
-                          onClick={() => setShowStudentId((current) => !current)}
+                            onClick={() => setShowEmail((current) => !current)}
 
-                          className="text-muted-foreground hover:text-foreground"
+                            className="text-muted-foreground hover:text-foreground"
 
-                          title={showStudentId ? "Ẩn MSSV" : "Hiện MSSV"}
-                        >
-                          {showStudentId ? (
-                            <EyeOff className="h-3.5 w-3.5" />
-                          ) : (
-                            <Eye className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      </div>
-                    </th>
-
-                    <th className="px-5 py-3 font-medium">Phòng</th>
-
-                    <th className="px-5 py-3 font-medium">Trạng thái</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredParticipants.map((participant) => (
-                    <tr key={participant.id} className="border-t border-border">
-                      <td className="px-5 py-3 font-medium">{participant.full_name}</td>
-
-                      <td className="px-5 py-3 text-muted-foreground">
-                        {showEmail ? participant.email : "••••••••••"}
-                      </td>
-
-                      <td className="px-5 py-3 text-muted-foreground">
-                        {showPhone ? participant.phone || "—" : "••••••••••"}
-                      </td>
-
-                      <td className="px-5 py-3 text-muted-foreground">
-                        {showStudentId ? participant.student_id || "—" : "••••••••"}
-                      </td>
-
-                      <td className="px-5 py-3">{roomName(participant.room_id)}</td>
-
-                      <td className="px-5 py-3">
-                        {participant.checked_out_at ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
-                              Đã check-out
-                            </span>
-
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {formatDateTime(participant.checked_out_at)}
-                            </div>
-
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              Bởi: {operatorName(participant.checked_out_by)}
-                            </div>
-                          </div>
-                        ) : participant.checked_in_at || participant.checked_in ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                              <CheckCircle2 className="h-3 w-3" />
-                              Đã check-in
-                            </span>
-
-                            {participant.checked_in_at && (
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                {formatDateTime(participant.checked_in_at)}
-                              </div>
+                            title={showEmail ? "Ẩn Email" : "Hiện Email"}
+                          >
+                            {showEmail ? (
+                              <EyeOff className="h-3.5 w-3.5" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
                             )}
+                          </button>
+                        </div>
+                      </th>
 
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              Bởi: {operatorName(participant.checked_in_by)}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                            Chưa đến
-                          </span>
-                        )}
-                      </td>
+                      <th className="px-5 py-3 font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>SĐT</span>
+
+                          <button
+                            type="button"
+
+                            onClick={() => setShowPhone((current) => !current)}
+
+                            className="text-muted-foreground hover:text-foreground"
+
+                            title={showPhone ? "Ẩn SĐT" : "Hiện SĐT"}
+                          >
+                            {showPhone ? (
+                              <EyeOff className="h-3.5 w-3.5" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </th>
+
+                      <th className="px-5 py-3 font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>MSSV</span>
+
+                          <button
+                            type="button"
+
+                            onClick={() => setShowStudentId((current) => !current)}
+
+                            className="text-muted-foreground hover:text-foreground"
+
+                            title={showStudentId ? "Ẩn MSSV" : "Hiện MSSV"}
+                          >
+                            {showStudentId ? (
+                              <EyeOff className="h-3.5 w-3.5" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </th>
+
+                      <th className="px-5 py-3 font-medium">Phòng</th>
+
+                      <th className="px-5 py-3 font-medium">Trạng thái</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+
+                  <tbody>
+                    {filteredParticipants.map((participant) => (
+                      <tr key={participant.id} className="border-t border-border">
+                        <td className="px-5 py-3 font-medium">{participant.full_name}</td>
+
+                        <td className="px-5 py-3 text-muted-foreground">
+                          {showEmail ? participant.email : "••••••••••"}
+                        </td>
+
+                        <td className="px-5 py-3 text-muted-foreground">
+                          {showPhone ? participant.phone || "—" : "••••••••••"}
+                        </td>
+
+                        <td className="px-5 py-3 text-muted-foreground">
+                          {showStudentId ? participant.student_id || "—" : "••••••••"}
+                        </td>
+
+                        <td className="px-5 py-3">{roomName(participant.room_id)}</td>
+
+                        <td className="px-5 py-3">
+                          {participant.checked_out_at ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                                Đã check-out
+                              </span>
+
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {formatDateTime(participant.checked_out_at)}
+                              </div>
+
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                Bởi: {operatorName(participant.checked_out_by)}
+                              </div>
+                            </div>
+                          ) : participant.checked_in_at || participant.checked_in ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Đã check-in
+                              </span>
+
+                              {participant.checked_in_at && (
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  {formatDateTime(participant.checked_in_at)}
+                                </div>
+                              )}
+
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                Bởi: {operatorName(participant.checked_in_by)}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                              Chưa đến
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>

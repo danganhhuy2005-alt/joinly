@@ -47,6 +47,7 @@ import {
   updateQuiz,
   importQuizQuestions,
   requestQuizImageUpload,
+  copyQuizToEdit,
   moveQuizQuestion,
 } from "@/lib/quiz.functions";
 import { controlLiveQuiz } from "@/lib/quiz.host.functions";
@@ -652,6 +653,30 @@ function QuizManagePage() {
     }, "Đã tạo Quiz mới.");
   }
 
+  function handleCopyQuizToEdit() {
+    if (!selectedId || busy || !canManageQuestions) {
+      return;
+    }
+
+    const sourceQuizId = selectedId;
+
+    void runAction(async () => {
+      const result = await copyQuizToEdit({
+        data: {
+          quizId: sourceQuizId,
+        },
+      });
+
+      await reloadQuizzes();
+
+      // Tự động chuyển sang Quiz mới.
+      setSelectedId(result.quizId);
+      setActiveTab("questions");
+
+      resetQuestion(0);
+    }, "Đã tạo bản sao để sửa. Các phiên cũ được giữ nguyên.");
+  }
+
   // =========================================
   // SỬA THÔNG TIN QUIZ
   // =========================================
@@ -1090,20 +1115,57 @@ function QuizManagePage() {
   // =========================================
 
   function handleDeleteQuiz() {
-    if (!selectedId || !window.confirm("Xóa Quiz này? Chỉ xóa được Quiz chưa có phiên chơi.")) {
+    if (!selectedId || busy || !canManageQuestions) {
+      return;
+    }
+
+    const quizId = selectedId;
+
+    const quizName = editor?.quiz.title ?? "bộ câu hỏi này";
+
+    // Kiểm tra phiên đang mở.
+    const hasActiveSessions = sessions.some(
+      (session) =>
+        session.status === "waiting" || session.status === "active" || session.status === "paused",
+    );
+
+    let message: string;
+
+    if (hasActiveSessions) {
+      message =
+        `Quiz "${quizName}" còn phiên đang mở.\n\n` +
+        "Bạn có chắc chắn muốn xóa không?\n\n" +
+        "Việc xóa sẽ kết thúc tất cả phiên đang mở, " +
+        "bao gồm Live Quiz và Self-paced.\n\n" +
+        "Toàn bộ câu hỏi, người chơi, câu trả lời " +
+        "và điểm số sẽ bị xóa vĩnh viễn.\n\n" +
+        "KHÔNG THỂ HOÀN TÁC!";
+    } else {
+      message =
+        `Bạn có chắc chắn muốn xóa Quiz "${quizName}"?\n\n` +
+        "Tất cả câu hỏi, phiên chơi, lịch sử " +
+        "trả lời và điểm số sẽ bị xóa.\n\n" +
+        "Thao tác này không thể hoàn tác.";
+    }
+
+    if (!window.confirm(message)) {
       return;
     }
 
     void runAction(async () => {
       await deleteUnusedQuiz({
-        data: { quizId: selectedId },
+        data: {
+          quizId,
+          confirmActive: hasActiveSessions,
+        },
       });
 
       const items = await reloadQuizzes();
 
       setSelectedId(items[0]?.id ?? null);
+
       resetQuestion(0);
-    }, "Đã xóa Quiz.");
+    }, "Đã xóa bộ câu hỏi Quiz.");
   }
 
   // =========================================
@@ -1930,10 +1992,22 @@ function QuizManagePage() {
                     )}
 
                     {canManageQuestions && !canEditQuestions && (
-                      <p className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">
-                        Quiz đang có phiên mở hoặc đã có người tham gia, nên câu hỏi được khóa để
-                        bảo toàn kết quả.
-                      </p>
+                      <div className="space-y-3 rounded-xl bg-muted p-4">
+                        <p className="text-sm text-muted-foreground">
+                          Quiz đã có phiên chơi hoặc người tham gia. Để giữ nguyên lịch sử điểm, hãy
+                          tạo một bản sao có đầy đủ câu hỏi và ảnh rồi chỉnh sửa bản mới.
+                        </p>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={handleCopyQuizToEdit}
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          Tạo bản sao để sửa
+                        </Button>
+                      </div>
                     )}
 
                     {/* FORM THÊM CÂU HỎI */}

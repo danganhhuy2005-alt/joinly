@@ -123,37 +123,6 @@ function MyEvents() {
 
   const demoCount = events.filter((e) => e.is_demo).length;
 
-  const onCreateDemo = async () => {
-    setSeeding(true);
-    try {
-      const res = await createDemo();
-      toast.success(
-        `Đã tạo sự kiện demo với ${res.rooms} phòng và ${res.participants} người tham gia.`,
-      );
-      await load();
-    } catch {
-      toast.error("Không thể tạo dữ liệu demo. Vui lòng thử lại.");
-    } finally {
-      setSeeding(false);
-    }
-  };
-
-  const onDeleteDemo = async () => {
-    setDeleting(true);
-    try {
-      const res = await deleteDemo();
-      if (res.deleted === 0) toast.info("Không có dữ liệu demo để xoá.");
-      else
-        toast.success(`Đã xoá ${res.deleted} sự kiện demo cùng toàn bộ phòng và người tham gia.`);
-      await load();
-    } catch {
-      toast.error("Không thể xoá dữ liệu demo. Vui lòng thử lại.");
-    } finally {
-      setDeleting(false);
-      setConfirmOpen(false);
-    }
-  };
-
   const onDeleteDraft = async () => {
     if (!draftToDelete || deletingDraft) return;
 
@@ -205,28 +174,6 @@ function MyEvents() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={onCreateDemo} disabled={seeding}>
-              {seeding ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              Tạo dữ liệu demo
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmOpen(true)}
-              disabled={deleting || demoCount === 0}
-              title={demoCount === 0 ? "Chưa có dữ liệu demo" : undefined}
-            >
-              {deleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-              Xoá dữ liệu demo{demoCount > 0 ? ` (${demoCount})` : ""}
-            </Button>
-
             <Button
               asChild={!loading && !isDraftLimitReached}
               size="lg"
@@ -439,25 +386,6 @@ function MyEvents() {
           )}
         </div>
       </main>
-
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Xoá toàn bộ dữ liệu demo?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Thao tác này sẽ xoá {demoCount} sự kiện demo cùng toàn bộ phòng và người tham gia được
-              tạo tự động. Dữ liệu thật của bạn sẽ KHÔNG bị ảnh hưởng. Hành động này không thể hoàn
-              tác.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Huỷ</AlertDialogCancel>
-            <AlertDialogAction onClick={onDeleteDemo} disabled={deleting}>
-              {deleting && <Loader2 className="h-4 w-4 animate-spin" />} Xoá dữ liệu demo
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog
         open={Boolean(draftToDelete)}

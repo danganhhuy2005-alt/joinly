@@ -1012,6 +1012,8 @@ export const submitQuizPlayerAnswer = createServerFn({
 })
   .inputValidator((input) => answerInput.parse(input))
   .handler(async ({ data }) => {
+    const receivedAtServer = new Date().toISOString();
+
     const db = await quizDb();
 
     // Xác thực người chơi bằng token.
@@ -1090,11 +1092,12 @@ export const submitQuizPlayerAnswer = createServerFn({
     // DATABASE CHẤM ĐIỂM
     // ==================================
 
-    const { data: result, error } = await db.rpc("quiz_submit_answer", {
+    const { data: result, error } = await db.rpc("quiz_submit_answer_received", {
       p_attempt_id: data.attemptId,
       p_token_hash: tokenHash,
       p_question_id: data.questionId,
       p_selected_index: selectedIndexForDatabase,
+      p_received_at: receivedAtServer,
     });
 
     if (error) {

@@ -1407,12 +1407,6 @@ function QuizPlayerPage() {
                         }}
                       />
                     </div>
-
-                    <p className="mt-3 text-xs text-white/65 sm:text-sm">
-                      {game.answeredCount ?? 0}/{game.playerCount ?? 0} người đã trả lời
-                      {" · "}
-                      Tối thiểu 200 điểm nếu đúng hạn
-                    </p>
                   </>
                 ) : (
                   <p className="text-center text-sm font-semibold text-[#AAF4DE]">

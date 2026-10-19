@@ -310,6 +310,123 @@ export const getQuizEditor = createServerFn({
     };
   });
 
+export const copyQuizToEdit = createServerFn({
+  method: "POST",
+})
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => quizIdSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const db = await quizDb();
+
+    const original = await requireQuiz(db, data.quizId);
+
+    await assertQuizRole(context.supabase, original.event_id, false);
+
+    // Lấy toàn bộ câu hỏi gốc.
+    const { data: questions, error: questionError } = await db
+      .from("quiz_questions")
+      .select(
+        "title,options,correct_index,position,points,time_limit_seconds,explanation,media_url,media_effect",
+      )
+      .eq("quiz_id", original.id)
+      .order("position", { ascending: true });
+
+    if (questionError) throw questionError;
+
+    // Tạo bộ Quiz mới.
+    const suffix = " (Bản chỉnh sửa)";
+
+    const copyTitle = original.title.slice(0, 200 - suffix.length) + suffix;
+
+    const { data: newQuiz, error: createError } = await db
+      .from("quizzes")
+      .insert({
+        event_id: original.event_id,
+        title: copyTitle,
+        description: original.description,
+        created_by: context.userId,
+      })
+      .select("id")
+      .single();
+
+    if (createError) throw createError;
+
+    // Sao chép ảnh để bản mới có thể hoạt động
+    // độc lập với Storage của Quiz cũ.
+    const storage = db.storage.from("quiz-question-media");
+
+    const sourcePrefix = storage.getPublicUrl(`${original.event_id}/${original.id}/`).data
+      .publicUrl;
+
+    const copiedImages: string[] = [];
+
+    try {
+      const { randomUUID } = await import("node:crypto");
+
+      const rows = [];
+
+      for (const question of questions ?? []) {
+        let mediaUrl = question.media_url as string | null;
+
+        if (mediaUrl?.startsWith(sourcePrefix)) {
+          const filename = mediaUrl.slice(sourcePrefix.length);
+
+          if (!/^[0-9a-f-]{36}\.(jpg|png|webp|gif)$/i.test(filename)) {
+            throw new Error("Ảnh trong Quiz cũ không có đường dẫn hợp lệ.");
+          }
+
+          const extension = filename.split(".").pop();
+
+          const from = `${original.event_id}/${original.id}/${filename}`;
+
+          const to = `${original.event_id}/${newQuiz.id}/${randomUUID()}.${extension}`;
+
+          const { error: imageError } = await storage.copy(from, to);
+
+          if (imageError) {
+            throw new Error(`Không sao chép được ảnh: ${imageError.message}`);
+          }
+
+          copiedImages.push(to);
+
+          mediaUrl = storage.getPublicUrl(to).data.publicUrl;
+        }
+
+        rows.push({
+          quiz_id: newQuiz.id,
+          title: question.title,
+          options: question.options,
+          correct_index: question.correct_index,
+          position: question.position,
+          points: question.points,
+          time_limit_seconds: question.time_limit_seconds,
+          explanation: question.explanation,
+          media_url: mediaUrl,
+          media_effect: question.media_effect ?? "tiles9",
+        });
+      }
+
+      if (rows.length > 0) {
+        const { error: insertError } = await db.from("quiz_questions").insert(rows);
+
+        if (insertError) throw insertError;
+      }
+    } catch (error) {
+      // Dọn dữ liệu mới nếu sao chép thất bại.
+      if (copiedImages.length > 0) {
+        await storage.remove(copiedImages);
+      }
+
+      await db.from("quizzes").delete().eq("id", newQuiz.id);
+
+      throw error;
+    }
+
+    return {
+      quizId: newQuiz.id as string,
+    };
+  });
+
 // ==========================================
 // 4. SỬA THÔNG TIN QUIZ
 // Owner / Co-owner
@@ -716,35 +833,47 @@ export const deleteQuizQuestion = createServerFn({
 // Owner / Co-owner
 // ==========================================
 
+//
+// ==========================================
+// 7. XÓA BỘ QUIZ KHÔNG CÒN SỬ DỤNG
+// OWNER / CO-OWNER
+// ==========================================
+//
+
 export const deleteUnusedQuiz = createServerFn({
   method: "POST",
 })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => quizIdSchema.parse(input))
+  .inputValidator((input) =>
+    z
+      .object({
+        quizId: uuid,
+        confirmActive: z.boolean(),
+      })
+      .parse(input),
+  )
   .handler(async ({ data, context }) => {
     const db = await quizDb();
 
     const quiz = await requireQuiz(db, data.quizId);
 
+    // Chỉ Owner và Co-owner được xóa.
     await assertQuizRole(context.supabase, quiz.event_id, false);
 
-    const { count, error: countError } = await db
-      .from("quiz_sessions")
-      .select("id", {
-        count: "exact",
-        head: true,
-      })
-      .eq("quiz_id", quiz.id);
+    const { error } = await db.rpc("quiz_delete_confirmed", {
+      p_quiz_id: quiz.id,
+      p_confirm_active: data.confirmActive,
+    });
 
-    if (countError) throw countError;
+    if (error) {
+      if (error.message.includes("QUIZ_CONFIRM_ACTIVE_REQUIRED")) {
+        throw new Error(
+          "Trạng thái phiên đã thay đổi. Hãy tải lại danh sách và xác nhận xóa lần nữa.",
+        );
+      }
 
-    if ((count ?? 0) > 0) {
-      throw new Error("Quiz đã có phiên chơi, không thể xóa dữ liệu.");
+      throw error;
     }
-
-    const { error } = await db.from("quizzes").delete().eq("id", quiz.id);
-
-    if (error) throw error;
 
     return {
       ok: true as const,

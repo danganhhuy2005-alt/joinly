@@ -9,6 +9,7 @@ import {
   QrCode,
   Sparkles,
   Loader2,
+  Gamepad2,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -518,41 +519,67 @@ function EmptyState() {
 
 function EventCard({ event }: { event: EventWithRole }) {
   const date = event.starts_at ? new Date(event.starts_at) : null;
+
   const roleLabel =
     event.access_role === "owner"
       ? "Owner"
       : event.access_role === "co_owner"
         ? "Co-owner"
         : "Manager";
-  return (
-    <Link
-      to="/manage-event/$id"
-      params={{ id: event.id }}
-      className="group block cursor-pointer rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="font-display text-lg font-semibold leading-tight">{event.name}</h3>
 
-        <span className="shrink-0 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs font-medium">
-          {roleLabel}
-        </span>
-      </div>
-      {event.description && (
-        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{event.description}</p>
-      )}
-      <div className="mt-4 space-y-1.5 text-sm text-muted-foreground">
-        {date && (
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            {date.toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" })}
-          </div>
+  return (
+    <div className="group overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
+      {/* THÔNG TIN SỰ KIỆN */}
+
+      <Link to="/manage-event/$id" params={{ id: event.id }} className="block cursor-pointer p-6">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-display text-lg font-semibold leading-tight">{event.name}</h3>
+
+          <span className="shrink-0 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs font-medium">
+            {roleLabel}
+          </span>
+        </div>
+
+        {event.description && (
+          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{event.description}</p>
         )}
-        {event.location && (
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" /> {event.location}
-          </div>
-        )}
+
+        <div className="mt-4 space-y-1.5 text-sm text-muted-foreground">
+          {date && (
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              {date.toLocaleString("vi-VN", {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </div>
+          )}
+
+          {event.location && (
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              {event.location}
+            </div>
+          )}
+        </div>
+      </Link>
+
+      {/* NÚT QUẢN LÝ RIÊNG */}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-3">
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/manage-event/$id" params={{ id: event.id }}>
+            Quản lý sự kiện
+          </Link>
+        </Button>
+
+        <Button size="sm" asChild>
+          <Link to="/dashboard/$id/quiz" params={{ id: event.id }}>
+            <Gamepad2 className="mr-2 h-4 w-4" />
+            Quản lý Quiz
+          </Link>
+        </Button>
       </div>
-    </Link>
+    </div>
   );
 }

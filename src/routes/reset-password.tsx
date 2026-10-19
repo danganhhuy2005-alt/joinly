@@ -61,8 +61,12 @@ function ResetPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-secondary/40 px-4 py-12">
       <div className="w-full max-w-md">
-        <Link to="/login" className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Về đăng nhập
+        <Link
+          to="/"
+          className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Về trang chủ
         </Link>
         <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
           <div className="flex items-center gap-2">
@@ -81,11 +85,26 @@ function ResetPasswordPage() {
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="password">Mật khẩu mới</Label>
-              <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Ít nhất 6 ký tự" />
+              <Input
+                id="password"
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Ít nhất 6 ký tự"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirm">Xác nhận mật khẩu</Label>
-              <Input id="confirm" type="password" required minLength={6} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              <Input
+                id="confirm"
+                type="password"
+                required
+                minLength={6}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={loading || !ready}>
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}

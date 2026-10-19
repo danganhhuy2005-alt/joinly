@@ -21,16 +21,19 @@ import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as FeedbackFormIdRouteImport } from './routes/feedback.$formId'
 import { Route as JoinIdRouteImport } from './routes/join.$id'
+import { Route as QuizJoinCodeRouteImport } from './routes/quiz.$joinCode'
 import { Route as AuthenticatedCheckInIdRouteImport } from './routes/_authenticated/check-in.$id'
 import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
 import { Route as AuthenticatedEditEventIdRouteImport } from './routes/_authenticated/edit-event.$id'
 import { Route as AuthenticatedEventIdRouteImport } from './routes/_authenticated/event.$id'
 import { Route as AuthenticatedManageEventIdRouteImport } from './routes/_authenticated/manage-event.$id'
+import { Route as AuthenticatedQuizHostSessionIdRouteImport } from './routes/_authenticated/quiz-host.$sessionId'
 import { Route as ApiSepayWebhookRouteImport } from './routes/api.sepay.webhook'
 import { Route as JoinIdIndexRouteImport } from './routes/join.$id.index'
 import { Route as JoinIdRoomIdRouteImport } from './routes/join.$id.$roomId'
 import { Route as AuthenticatedDashboardIdFeedbackRouteImport } from './routes/_authenticated/dashboard_.$id.feedback'
 import { Route as AuthenticatedDashboardIdMembersRouteImport } from './routes/_authenticated/dashboard_.$id.members'
+import { Route as AuthenticatedDashboardIdQuizRouteImport } from './routes/_authenticated/dashboard_.$id.quiz'
 import { Route as JoinIdConfirmTokenRouteImport } from './routes/join.$id.confirm.$token'
 import { Route as AuthenticatedDashboardIdAllowlistTsxRouteImport } from './routes/_authenticated/dashboard_.$id.allowlist.tsx'
 
@@ -95,6 +98,11 @@ const JoinIdRoute = JoinIdRouteImport.update({
   path: '/join/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const QuizJoinCodeRoute = QuizJoinCodeRouteImport.update({
+  id: '/quiz/$joinCode',
+  path: '/quiz/$joinCode',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedCheckInIdRoute = AuthenticatedCheckInIdRouteImport.update({
   id: '/check-in/$id',
   path: '/check-in/$id',
@@ -121,6 +129,12 @@ const AuthenticatedManageEventIdRoute =
   AuthenticatedManageEventIdRouteImport.update({
     id: '/manage-event/$id',
     path: '/manage-event/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedQuizHostSessionIdRoute =
+  AuthenticatedQuizHostSessionIdRouteImport.update({
+    id: '/quiz-host/$sessionId',
+    path: '/quiz-host/$sessionId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const ApiSepayWebhookRoute = ApiSepayWebhookRouteImport.update({
@@ -150,6 +164,12 @@ const AuthenticatedDashboardIdMembersRoute =
     path: '/dashboard/$id/members',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDashboardIdQuizRoute =
+  AuthenticatedDashboardIdQuizRouteImport.update({
+    id: '/dashboard_/$id/quiz',
+    path: '/dashboard/$id/quiz',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const JoinIdConfirmTokenRoute = JoinIdConfirmTokenRouteImport.update({
   id: '/confirm/$token',
   path: '/confirm/$token',
@@ -174,16 +194,19 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/feedback/$formId': typeof FeedbackFormIdRoute
   '/join/$id': typeof JoinIdRouteWithChildren
+  '/quiz/$joinCode': typeof QuizJoinCodeRoute
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
   '/manage-event/$id': typeof AuthenticatedManageEventIdRoute
+  '/quiz-host/$sessionId': typeof AuthenticatedQuizHostSessionIdRoute
   '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id/': typeof JoinIdIndexRoute
   '/dashboard/$id/feedback': typeof AuthenticatedDashboardIdFeedbackRoute
   '/dashboard/$id/members': typeof AuthenticatedDashboardIdMembersRoute
+  '/dashboard/$id/quiz': typeof AuthenticatedDashboardIdQuizRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
   '/dashboard/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
 }
@@ -198,16 +221,19 @@ export interface FileRoutesByTo {
   '/plans': typeof AuthenticatedPlansRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/feedback/$formId': typeof FeedbackFormIdRoute
+  '/quiz/$joinCode': typeof QuizJoinCodeRoute
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
   '/manage-event/$id': typeof AuthenticatedManageEventIdRoute
+  '/quiz-host/$sessionId': typeof AuthenticatedQuizHostSessionIdRoute
   '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id': typeof JoinIdIndexRoute
   '/dashboard/$id/feedback': typeof AuthenticatedDashboardIdFeedbackRoute
   '/dashboard/$id/members': typeof AuthenticatedDashboardIdMembersRoute
+  '/dashboard/$id/quiz': typeof AuthenticatedDashboardIdQuizRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
   '/dashboard/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
 }
@@ -225,16 +251,19 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/feedback/$formId': typeof FeedbackFormIdRoute
   '/join/$id': typeof JoinIdRouteWithChildren
+  '/quiz/$joinCode': typeof QuizJoinCodeRoute
   '/_authenticated/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/_authenticated/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/_authenticated/event/$id': typeof AuthenticatedEventIdRoute
   '/_authenticated/manage-event/$id': typeof AuthenticatedManageEventIdRoute
+  '/_authenticated/quiz-host/$sessionId': typeof AuthenticatedQuizHostSessionIdRoute
   '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
   '/join/$id/': typeof JoinIdIndexRoute
   '/_authenticated/dashboard_/$id/feedback': typeof AuthenticatedDashboardIdFeedbackRoute
   '/_authenticated/dashboard_/$id/members': typeof AuthenticatedDashboardIdMembersRoute
+  '/_authenticated/dashboard_/$id/quiz': typeof AuthenticatedDashboardIdQuizRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
   '/_authenticated/dashboard_/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
 }
@@ -252,16 +281,19 @@ export interface FileRouteTypes {
     | '/profile'
     | '/feedback/$formId'
     | '/join/$id'
+    | '/quiz/$joinCode'
     | '/check-in/$id'
     | '/dashboard/$id'
     | '/edit-event/$id'
     | '/event/$id'
     | '/manage-event/$id'
+    | '/quiz-host/$sessionId'
     | '/api/sepay/webhook'
     | '/join/$id/$roomId'
     | '/join/$id/'
     | '/dashboard/$id/feedback'
     | '/dashboard/$id/members'
+    | '/dashboard/$id/quiz'
     | '/join/$id/confirm/$token'
     | '/dashboard/$id/allowlist/tsx'
   fileRoutesByTo: FileRoutesByTo
@@ -276,16 +308,19 @@ export interface FileRouteTypes {
     | '/plans'
     | '/profile'
     | '/feedback/$formId'
+    | '/quiz/$joinCode'
     | '/check-in/$id'
     | '/dashboard/$id'
     | '/edit-event/$id'
     | '/event/$id'
     | '/manage-event/$id'
+    | '/quiz-host/$sessionId'
     | '/api/sepay/webhook'
     | '/join/$id/$roomId'
     | '/join/$id'
     | '/dashboard/$id/feedback'
     | '/dashboard/$id/members'
+    | '/dashboard/$id/quiz'
     | '/join/$id/confirm/$token'
     | '/dashboard/$id/allowlist/tsx'
   id:
@@ -302,16 +337,19 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/feedback/$formId'
     | '/join/$id'
+    | '/quiz/$joinCode'
     | '/_authenticated/check-in/$id'
     | '/_authenticated/dashboard/$id'
     | '/_authenticated/edit-event/$id'
     | '/_authenticated/event/$id'
     | '/_authenticated/manage-event/$id'
+    | '/_authenticated/quiz-host/$sessionId'
     | '/api/sepay/webhook'
     | '/join/$id/$roomId'
     | '/join/$id/'
     | '/_authenticated/dashboard_/$id/feedback'
     | '/_authenticated/dashboard_/$id/members'
+    | '/_authenticated/dashboard_/$id/quiz'
     | '/join/$id/confirm/$token'
     | '/_authenticated/dashboard_/$id/allowlist/tsx'
   fileRoutesById: FileRoutesById
@@ -324,6 +362,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   FeedbackFormIdRoute: typeof FeedbackFormIdRoute
   JoinIdRoute: typeof JoinIdRouteWithChildren
+  QuizJoinCodeRoute: typeof QuizJoinCodeRoute
   ApiSepayWebhookRoute: typeof ApiSepayWebhookRoute
 }
 
@@ -413,6 +452,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JoinIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/quiz/$joinCode': {
+      id: '/quiz/$joinCode'
+      path: '/quiz/$joinCode'
+      fullPath: '/quiz/$joinCode'
+      preLoaderRoute: typeof QuizJoinCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/check-in/$id': {
       id: '/_authenticated/check-in/$id'
       path: '/check-in/$id'
@@ -446,6 +492,13 @@ declare module '@tanstack/react-router' {
       path: '/manage-event/$id'
       fullPath: '/manage-event/$id'
       preLoaderRoute: typeof AuthenticatedManageEventIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/quiz-host/$sessionId': {
+      id: '/_authenticated/quiz-host/$sessionId'
+      path: '/quiz-host/$sessionId'
+      fullPath: '/quiz-host/$sessionId'
+      preLoaderRoute: typeof AuthenticatedQuizHostSessionIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/api/sepay/webhook': {
@@ -483,6 +536,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardIdMembersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/dashboard_/$id/quiz': {
+      id: '/_authenticated/dashboard_/$id/quiz'
+      path: '/dashboard/$id/quiz'
+      fullPath: '/dashboard/$id/quiz'
+      preLoaderRoute: typeof AuthenticatedDashboardIdQuizRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/join/$id/confirm/$token': {
       id: '/join/$id/confirm/$token'
       path: '/confirm/$token'
@@ -511,8 +571,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedEditEventIdRoute: typeof AuthenticatedEditEventIdRoute
   AuthenticatedEventIdRoute: typeof AuthenticatedEventIdRoute
   AuthenticatedManageEventIdRoute: typeof AuthenticatedManageEventIdRoute
+  AuthenticatedQuizHostSessionIdRoute: typeof AuthenticatedQuizHostSessionIdRoute
   AuthenticatedDashboardIdFeedbackRoute: typeof AuthenticatedDashboardIdFeedbackRoute
   AuthenticatedDashboardIdMembersRoute: typeof AuthenticatedDashboardIdMembersRoute
+  AuthenticatedDashboardIdQuizRoute: typeof AuthenticatedDashboardIdQuizRoute
   AuthenticatedDashboardIdAllowlistTsxRoute: typeof AuthenticatedDashboardIdAllowlistTsxRoute
 }
 
@@ -527,8 +589,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEditEventIdRoute: AuthenticatedEditEventIdRoute,
   AuthenticatedEventIdRoute: AuthenticatedEventIdRoute,
   AuthenticatedManageEventIdRoute: AuthenticatedManageEventIdRoute,
+  AuthenticatedQuizHostSessionIdRoute: AuthenticatedQuizHostSessionIdRoute,
   AuthenticatedDashboardIdFeedbackRoute: AuthenticatedDashboardIdFeedbackRoute,
   AuthenticatedDashboardIdMembersRoute: AuthenticatedDashboardIdMembersRoute,
+  AuthenticatedDashboardIdQuizRoute: AuthenticatedDashboardIdQuizRoute,
   AuthenticatedDashboardIdAllowlistTsxRoute:
     AuthenticatedDashboardIdAllowlistTsxRoute,
 }
@@ -559,6 +623,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   FeedbackFormIdRoute: FeedbackFormIdRoute,
   JoinIdRoute: JoinIdRouteWithChildren,
+  QuizJoinCodeRoute: QuizJoinCodeRoute,
   ApiSepayWebhookRoute: ApiSepayWebhookRoute,
 }
 export const routeTree = rootRouteImport

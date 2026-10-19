@@ -1,5 +1,13 @@
 {
-  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts", "eslint.config.js", "src/routes/_authenticated/check-in.$id", "src/routes/_authenticated/check-in.$id"],
+  "include": [
+  "src/**/*.ts",
+  "src/**/*.tsx",
+  "vite.config.ts",
+  "eslint.config.js"
+],
+"exclude": [
+  "src/lib/mcp/**/*"
+],
   "compilerOptions": {
     "target": "ES2022",
     "jsx": "react-jsx",

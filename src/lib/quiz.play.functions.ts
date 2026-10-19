@@ -53,10 +53,11 @@ type Session = {
   results_revealed: boolean;
 
   auto_play_enabled: boolean;
-  live_phase: "lobby" | "question" | "reveal" | "leaderboard" | "finished";
+  live_phase: "lobby" | "intro" | "question" | "reveal" | "leaderboard" | "finished";
 
   phase_started_at: string | null;
   paused_at: string | null;
+  revealed_at: string | null;
   reveal_seconds: number;
   leaderboard_seconds: number;
   scoring_player_count: number | null;
@@ -79,13 +80,19 @@ type PublicQuestion = {
   position: number;
   points: number;
   time_limit_seconds: number;
+
+  // Ảnh/GIF minh họa.
   media_url: string | null;
+
+  // Hiệu ứng BTC đã chọn khi tạo câu hỏi.
+  media_effect: string;
 };
 
 // Tuyệt đối không lấy correct_index
 // và explanation cho người chơi.
 
-const PUBLIC_QUESTION_COLUMNS = "id,title,options,position,points,time_limit_seconds,media_url";
+const PUBLIC_QUESTION_COLUMNS =
+  "id,title,options,position,points,time_limit_seconds,media_url,media_effect";
 
 // ======================================
 // CÁC HÀM NỘI BỘ
@@ -107,7 +114,7 @@ async function getSession(db: QuizDb, attempt: Attempt) {
   const { data, error } = await db
     .from("quiz_sessions")
     .select(
-      "id,quiz_id,mode,status,current_question,question_started_at,results_revealed,auto_play_enabled,live_phase,phase_started_at,paused_at,reveal_seconds,leaderboard_seconds,scoring_player_count",
+      "id,quiz_id,mode,status,current_question,question_started_at,results_revealed,auto_play_enabled,live_phase,phase_started_at,paused_at,revealed_at,reveal_seconds,leaderboard_seconds,scoring_player_count",
     )
 
     .eq("id", attempt.session_id)
@@ -347,6 +354,51 @@ async function getLiveLeaderboard(db: QuizDb, sessionId: string) {
 // ĐỒNG HỒ TỪ SERVER
 // ======================================
 
+function calculateLiveImageProgress(session: Session, question: PublicQuestion | null): number {
+  if (!question || !session.question_started_at) {
+    return 0;
+  }
+
+  const startedAt = Date.parse(session.question_started_at);
+
+  // Khi Pause, lấy thời điểm đã dừng.
+  // Khi chơi bình thường, lấy hiện tại.
+  let stoppedAt =
+    session.status === "paused" && session.paused_at ? Date.parse(session.paused_at) : Date.now();
+
+  // =====================================
+  // ĐÃ REVEAL
+  // =====================================
+
+  if (session.results_revealed && session.revealed_at) {
+    stoppedAt = Date.parse(session.revealed_at);
+
+    // Sau Resume, SQL dịch question_started_at
+    // và phase_started_at cùng nhau.
+    // Dùng cùng hệ thời gian với Host.
+
+    if (session.auto_play_enabled && session.phase_started_at) {
+      const phaseStartedMs = Date.parse(session.phase_started_at);
+
+      if (Number.isFinite(phaseStartedMs)) {
+        if (session.live_phase === "reveal") {
+          stoppedAt = phaseStartedMs;
+        } else if (session.live_phase === "leaderboard") {
+          stoppedAt = phaseStartedMs - session.reveal_seconds * 1000;
+        }
+      }
+    }
+  }
+
+  if (!Number.isFinite(startedAt) || !Number.isFinite(stoppedAt)) {
+    return 0;
+  }
+
+  const durationMs = Math.max(1, question.time_limit_seconds) * 1000;
+
+  return Math.max(0, Math.min(1, (stoppedAt - startedAt) / durationMs));
+}
+
 function remainingPhaseSeconds(session: Session, duration: number): number | null {
   if (!session.phase_started_at) {
     return null;
@@ -383,6 +435,10 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
     // Database quyết định chuyển giai đoạn.
     // Client không được quyết định đáp án đúng.
 
+    // ==========================================
+    // LIVE QUIZ - ĐỒNG BỘ GIAI ĐOẠN
+    // ==========================================
+
     if (
       session.mode === "live" &&
       session.auto_play_enabled &&
@@ -391,8 +447,16 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
     ) {
       let duration: number | null = null;
 
-      if (session.live_phase === "question") {
-        const currentQuestion = await questionAt(db, attempt.quiz_id, session.current_question);
+      let currentQuestion: PublicQuestion | null = null;
+
+      // ======================================
+      // XÁC ĐỊNH THỜI LƯỢNG GIAI ĐOẠN
+      // ======================================
+
+      if (session.live_phase === "intro") {
+        duration = 9;
+      } else if (session.live_phase === "question") {
+        currentQuestion = await questionAt(db, attempt.quiz_id, session.current_question);
 
         duration = currentQuestion?.time_limit_seconds ?? null;
       } else if (session.live_phase === "reveal") {
@@ -403,15 +467,35 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
 
       const startedAt = Date.parse(session.phase_started_at);
 
-      const isExpired =
+      const timeExpired =
         duration !== null &&
         duration > 0 &&
         Number.isFinite(startedAt) &&
         Date.now() >= startedAt + duration * 1000;
 
-      // Chỉ gọi RPC khi giai đoạn đã hết giờ,
-      // tránh khóa phiên liên tục mỗi lần polling.
-      if (isExpired) {
+      // ======================================
+      // TẤT CẢ ĐÃ TRẢ LỜI?
+      // ======================================
+
+      let everyoneAnswered = false;
+
+      if (
+        !timeExpired &&
+        session.live_phase === "question" &&
+        currentQuestion &&
+        session.scoring_player_count !== null &&
+        session.scoring_player_count > 0
+      ) {
+        const answeredCount = await countLiveAnswers(db, session.id, currentQuestion.id);
+
+        everyoneAnswered = answeredCount >= session.scoring_player_count;
+      }
+
+      // ======================================
+      // YÊU CẦU DATABASE CHUYỂN GIAI ĐOẠN
+      // ======================================
+
+      if (timeExpired || everyoneAnswered) {
         const { error: tickError } = await db.rpc("quiz_live_auto_control", {
           p_session_id: session.id,
           p_action: "tick",
@@ -421,8 +505,8 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
           throw new Error(`Không thể đồng bộ Live Quiz: ${tickError.message}`);
         }
 
-        // Đọc lại vì DB có thể đã chuyển
-        // qua reveal, leaderboard hoặc câu mới.
+        // Luôn đọc lại trạng thái thật.
+        // Không tự suy đoán câu tiếp theo.
         session = await getSession(db, attempt);
       }
     }
@@ -449,9 +533,16 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
 
     const revealTimeReached = liveDeadlineMs !== null && Date.now() >= liveDeadlineMs;
 
-    // Không trả điểm trước thời điểm hết giờ.
-    const canSeeScore =
-      isLive && (session.status === "finished" || (session.results_revealed && revealTimeReached));
+    const canRevealNow =
+      isLive &&
+      session.results_revealed &&
+      (auto
+        ? session.live_phase === "reveal" ||
+          session.live_phase === "leaderboard" ||
+          session.live_phase === "finished"
+        : revealTimeReached);
+
+    const canSeeScore = isLive && (session.status === "finished" || canRevealNow);
 
     const base = {
       title: quiz.title,
@@ -485,11 +576,97 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
       };
     }
 
+    // ========================================
+    // PAUSE - GIỮ NGUYÊN CÂU HỎI VÀ ẢNH
+    // ========================================
+
     if (session.status === "paused") {
+      if (!isLive || !auto) {
+        return {
+          ...base,
+          phase: "paused" as const,
+          question: null,
+        };
+      }
+
+      const pausedQuestion = await questionAt(db, attempt.quiz_id, session.current_question);
+
+      if (!pausedQuestion) {
+        return {
+          ...base,
+          phase: "paused" as const,
+          question: null,
+        };
+      }
+
+      const pausedInIntro = session.live_phase === "intro";
+
+      const optionOrder = getLiveOptionOrder(
+        session.id,
+        pausedQuestion.id,
+        pausedQuestion.options.length,
+      );
+
+      const displayedQuestion = {
+        ...pausedQuestion,
+
+        // Pause trong Intro:
+        // không được gửi đáp án.
+        options: pausedInIntro
+          ? []
+          : optionOrder.map((originalIndex) => pausedQuestion.options[originalIndex]),
+      };
+
+      // Khôi phục đáp án người chơi đã chọn,
+      // không tiết lộ đáp án đúng.
+      const { data: savedAnswer, error } = await db
+        .from("quiz_answers")
+        .select("selected_index,points_earned")
+        .eq("attempt_id", attempt.id)
+        .eq("question_id", pausedQuestion.id)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      const originalSelected = savedAnswer?.selected_index;
+
+      const displaySelected =
+        !pausedInIntro && typeof originalSelected === "number"
+          ? optionOrder.indexOf(originalSelected)
+          : -1;
+
+      // Đồng hồ đóng băng tại paused_at.
+      let frozenSeconds: number | null = null;
+
+      if (session.live_phase === "intro") {
+        frozenSeconds = remainingPhaseSeconds(session, 9);
+      } else if (session.live_phase === "question") {
+        frozenSeconds = remainingPhaseSeconds(session, pausedQuestion.time_limit_seconds);
+      } else if (session.live_phase === "reveal") {
+        frozenSeconds = remainingPhaseSeconds(session, session.reveal_seconds);
+      } else if (session.live_phase === "leaderboard") {
+        frozenSeconds = remainingPhaseSeconds(session, session.leaderboard_seconds);
+      }
+
       return {
         ...base,
+
         phase: "paused" as const,
-        question: null,
+
+        pausedFromPhase: session.live_phase,
+
+        question: displayedQuestion,
+
+        questionNumber: session.current_question + 1,
+
+        selectedIndex: displaySelected >= 0 ? displaySelected : null,
+
+        // Tiến độ ảnh được cố định tại lúc Pause.
+        imageProgress: calculateLiveImageProgress(session, pausedQuestion),
+
+        phaseSecondsLeft: frozenSeconds,
       };
     }
 
@@ -514,6 +691,50 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
     // ==================================
 
     if (isLive) {
+      // ======================================
+      // GIAI ĐOẠN CHUẨN BỊ CÂU HỎI - 5 GIÂY
+      // ======================================
+
+      if (auto && session.live_phase === "intro") {
+        const introQuestion = await questionAt(db, attempt.quiz_id, session.current_question);
+
+        const introRemaining = remainingPhaseSeconds(session, 9);
+
+        // 5 giây đầu chỉ hiện câu hỏi.
+        // 4 giây cuối mới gửi đáp án.
+        const showOptions = introRemaining !== null && introRemaining <= 4;
+
+        const optionOrder = introQuestion
+          ? getLiveOptionOrder(session.id, introQuestion.id, introQuestion.options.length)
+          : [];
+
+        return {
+          ...base,
+
+          phase: "intro" as const,
+
+          question: introQuestion
+            ? {
+                ...introQuestion,
+
+                options: showOptions
+                  ? optionOrder.map((index) => introQuestion.options[index])
+                  : [],
+              }
+            : null,
+
+          questionNumber: session.current_question + 1,
+
+          endsAt: session.phase_started_at
+            ? new Date(Date.parse(session.phase_started_at) + 9000).toISOString()
+            : null,
+
+          phaseSecondsLeft: introRemaining,
+
+          potentialPoints: null,
+        };
+      }
+
       if (!session.question_started_at) {
         return {
           ...base,
@@ -531,7 +752,7 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
         // không được xem bảng điểm trước khi
         // thời gian câu hỏi ban đầu kết thúc.
 
-        if (!revealTimeReached) {
+        if (!canRevealNow) {
           return {
             ...base,
             phase: "time_up" as const,
@@ -574,7 +795,7 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
 
       const { data: previous, error: previousError } = await db
         .from("quiz_answers")
-        .select("selected_index")
+        .select("selected_index, points_earned")
         .eq("attempt_id", attempt.id)
         .eq("question_id", question.id)
         .maybeSingle();
@@ -593,7 +814,7 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
       // CÔNG BỐ ĐÁP ÁN
       // ==================================
 
-      if (session.results_revealed && revealTimeReached) {
+      if (canRevealNow) {
         // Chỉ truy vấn đáp án đúng sau khi
         // database đã công bố kết quả.
 
@@ -622,18 +843,23 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
 
         return {
           ...base,
+          imageProgress: calculateLiveImageProgress(session, question),
 
           phase: "revealed" as const,
 
           question: displayedQuestion,
           questionNumber,
-          endsAt,
+
+          // Nếu công bố sớm, đồng hồ trả lời
+          // phải dừng ngay tại mốc Reveal.
+          endsAt: auto && canRevealNow ? (session.phase_started_at ?? endsAt) : endsAt,
 
           phaseSecondsLeft: auto ? remainingPhaseSeconds(session, session.reveal_seconds) : null,
 
           reveal: {
             correctIndex,
             selectedIndex,
+            pointsEarned: previous?.points_earned ?? 0,
 
             wasCorrect: selectedIndex === null ? null : selectedIndex === correctIndex,
 
@@ -655,12 +881,31 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
               ? ("time_up" as const)
               : ("question" as const);
 
+      // ==========================================
+      // KHÔI PHỤC ĐÁP ÁN ĐÃ CHỌN
+      // ==========================================
+
+      // Supabase lưu chỉ số đáp án gốc.
+      // Live Quiz đã xáo trộn A/B/C/D nên
+      // phải đổi về vị trí đang hiển thị.
+      const selectedDisplayIndex =
+        previous && typeof previous.selected_index === "number"
+          ? optionOrder.indexOf(previous.selected_index)
+          : -1;
+
       const result = {
         ...base,
+
         phase,
         question: displayedQuestion,
         questionNumber,
         endsAt,
+
+        // Chỉ trả vị trí đáp án của người này.
+        // Không trả correct_index hoặc
+        // thông tin đúng/sai khi chưa Reveal.
+        selectedIndex:
+          phase === "answered" && selectedDisplayIndex >= 0 ? selectedDisplayIndex : null,
       };
 
       // Giữ tương thích phiên Live cũ.
@@ -684,25 +929,21 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
 
       const elapsed = Math.max(0, (Date.now() - Date.parse(session.question_started_at)) / 1000);
 
-      const timeRatio = Math.max(0, 1 - elapsed / question.time_limit_seconds);
+      // 0,5 giây đầu là khoảng được 1000 điểm.
+      // Không xét tỷ lệ người đã trả lời trước.
+      const timeRatio = Math.max(0, 1 - Math.max(0, elapsed - 0.5) / question.time_limit_seconds);
 
-      // Công thức tương ứng database:
-      // 1000 * thời gian còn lại
-      // * (1 - 0.7 * tỷ lệ người trước^2)
-      //
-      // Nếu trả lời đúng trước khi hết giờ:
-      // ít nhất 200 điểm.
-      //
-      // Đây chỉ là giá trị hiển thị,
-      // không phải điểm thực nhận.
-
-      const potentialPoints = Math.min(
-        1000,
-        Math.max(200, Math.floor(1000 * timeRatio * (1 - 0.7 * crowdRatio ** 2))),
-      );
+      const potentialPoints =
+        elapsed <= 0.5
+          ? 1000
+          : Math.min(
+              1000,
+              Math.max(200, Math.floor(1000 * timeRatio * (1 - 0.7 * crowdRatio ** 2))),
+            );
 
       return {
         ...result,
+        imageProgress: calculateLiveImageProgress(session, question),
 
         answeredCount,
         playerCount: playersAtStart,
@@ -776,7 +1017,34 @@ export const submitQuizPlayerAnswer = createServerFn({
     // Xác thực người chơi bằng token.
     const attempt = await requirePlayer(db, data.attemptId, data.playerToken);
 
-    const session = await getSession(db, attempt);
+    let session = await getSession(db, attempt);
+
+    // Điện thoại có thể mở nút trả lời đúng mốc
+    // kết thúc Intro mà chưa nhận được trạng thái
+    // Question mới từ lượt polling tiếp theo.
+    //
+    // Nếu server đã đủ 9 giây, chuyển phase trong
+    // database trước khi xử lý câu trả lời.
+
+    if (
+      session.mode === "live" &&
+      session.auto_play_enabled &&
+      session.status === "active" &&
+      session.live_phase === "intro" &&
+      session.phase_started_at &&
+      Date.now() >= Date.parse(session.phase_started_at) + 9000
+    ) {
+      const { error: tickError } = await db.rpc("quiz_live_auto_control", {
+        p_session_id: session.id,
+        p_action: "tick",
+      });
+
+      if (tickError) {
+        throw new Error("Không thể mở lượt trả lời. Vui lòng thử lại.");
+      }
+
+      session = await getSession(db, attempt);
+    }
 
     let selectedIndexForDatabase = data.selectedIndex;
 
@@ -835,11 +1103,36 @@ export const submitQuizPlayerAnswer = createServerFn({
       throw new Error("Không thể gửi đáp án. Vui lòng thử lại.");
     }
 
-    return result as {
+    const answerResult = result as {
       status: string;
       answered_count?: number;
       total_questions?: number;
     };
+
+    // ======================================
+    // NGƯỜI CHƠI VỪA GỬI ĐÁP ÁN
+    // ======================================
+
+    // Sau khi database chấm điểm thành công,
+    // yêu cầu kiểm tra xem tất cả người chơi
+    // trong phiên đã trả lời hay chưa.
+    //
+    // Chỉ database mới được chuyển giai đoạn.
+    // Nếu tick lỗi, không hủy câu trả lời
+    // đã được ghi nhận thành công.
+
+    if (session.mode === "live" && session.auto_play_enabled && answerResult.status === "ok") {
+      const { error: tickError } = await db.rpc("quiz_live_auto_control", {
+        p_session_id: session.id,
+        p_action: "tick",
+      });
+
+      if (tickError) {
+        console.error("Live Quiz auto tick failed:", tickError.message);
+      }
+    }
+
+    return answerResult;
   });
 
 // ======================================

@@ -15,6 +15,7 @@ import {
   ArrowUp,
   ArrowDown,
   FileSpreadsheet,
+  ImagePlus,
   Upload,
   X,
   RadioTower,
@@ -36,6 +37,7 @@ import { getEventRole, type EventRole } from "@/lib/event-role";
 import {
   createQuiz,
   createQuizSession,
+  deleteQuizSession,
   deleteQuizQuestion,
   deleteUnusedQuiz,
   getQuizEditor,
@@ -44,8 +46,10 @@ import {
   saveQuizQuestion,
   updateQuiz,
   importQuizQuestions,
+  requestQuizImageUpload,
   moveQuizQuestion,
 } from "@/lib/quiz.functions";
+import { controlLiveQuiz } from "@/lib/quiz.host.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard_/$id/quiz")({
   head: () => ({
@@ -71,6 +75,8 @@ type Question = {
   points: number;
   time_limit_seconds: number;
   explanation: string | null;
+  media_url?: string | null;
+  media_effect?: QuizMediaEffect | null;
 };
 
 type QuizEditor = {
@@ -97,6 +103,27 @@ type ExcelQuestion = {
   explanation: string;
 };
 
+const QUIZ_MEDIA_EFFECTS = [
+  { value: "full", label: "Hiện toàn bộ ảnh" },
+  { value: "tiles4", label: "Che 4 ô" },
+  { value: "tiles9", label: "Che 9 ô" },
+  { value: "tiles16", label: "Che 16 ô" },
+  { value: "random", label: "Mở ô ngẫu nhiên" },
+  { value: "flip", label: "Lật mảnh ghép" },
+  { value: "blur", label: "Mờ dần thành rõ" },
+  { value: "pixel", label: "Pixel hóa" },
+  { value: "left", label: "Mở từ trái sang phải" },
+  { value: "right", label: "Mở từ phải sang trái" },
+  { value: "down", label: "Mở từ trên xuống" },
+  { value: "up", label: "Mở từ dưới lên" },
+  { value: "center", label: "Mở từ giữa ra hai bên" },
+  { value: "circle", label: "Vòng tròn mở rộng" },
+  { value: "zoom", label: "Thu phóng ra" },
+  { value: "spotlight", label: "Đèn soi ảnh" },
+] as const;
+
+type QuizMediaEffect = (typeof QUIZ_MEDIA_EFFECTS)[number]["value"];
+
 const EXCEL_ALLOWED_TIMES = [10, 15, 20, 30, 45, 60, 90, 120];
 
 function normalizeExcelText(value: string) {
@@ -120,6 +147,140 @@ function optionsFrom(value: unknown): string[] {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Có lỗi xảy ra. Vui lòng thử lại.";
+}
+
+function QuizImageEffectPreview({
+  imageUrl,
+  effect,
+  progress,
+}: {
+  imageUrl: string;
+  effect: QuizMediaEffect;
+  progress: number;
+}) {
+  const p = Math.max(0, Math.min(1, progress));
+
+  // Luôn cho nhìn thấy một phần ảnh.
+  const visible = 0.12 + p * 0.88;
+  const hiddenPercent = (1 - visible) * 100;
+
+  // Nhóm hiệu ứng mở từng ô.
+  const tileSide =
+    effect === "tiles4"
+      ? 2
+      : effect === "tiles16"
+        ? 4
+        : ["tiles9", "random", "flip"].includes(effect)
+          ? 3
+          : 0;
+
+  const tileCount = tileSide * tileSide;
+
+  const tileOrder =
+    effect === "random"
+      ? [4, 0, 8, 2, 6, 1, 7, 3, 5]
+      : Array.from({ length: tileCount }, (_, index) => index);
+
+  const revealedTileCount = tileCount
+    ? Math.min(tileCount, 1 + Math.floor(p * (tileCount - 1)))
+    : 0;
+
+  const revealedTiles = new Set(tileOrder.slice(0, revealedTileCount));
+
+  // Nhóm hiệu ứng mở theo hướng.
+  let clipPath: string | undefined;
+
+  switch (effect) {
+    case "left":
+      clipPath = `inset(0 ${hiddenPercent}% 0 0)`;
+      break;
+
+    case "right":
+      clipPath = `inset(0 0 0 ${hiddenPercent}%)`;
+      break;
+
+    case "down":
+      clipPath = `inset(0 0 ${hiddenPercent}% 0)`;
+      break;
+
+    case "up":
+      clipPath = `inset(${hiddenPercent}% 0 0 0)`;
+      break;
+
+    case "center": {
+      const side = hiddenPercent / 2;
+      clipPath = `inset(0 ${side}% 0 ${side}%)`;
+      break;
+    }
+
+    case "circle":
+      clipPath = `circle(${10 + p * 140}% at 50% 50%)`;
+      break;
+
+    case "spotlight": {
+      const x = 25 + p * 25;
+      const y = 35 + p * 15;
+      const radius = 14 + p * 140;
+
+      clipPath = `circle(${radius}% at ${x}% ${y}%)`;
+      break;
+    }
+  }
+
+  // Pixel hóa bằng cách giảm độ phân giải
+  // hiển thị rồi phóng lớn bằng nearest-neighbor.
+  const pixelScale = effect === "pixel" ? 1 + Math.round((1 - p) * 24) : 1;
+
+  const zoomScale = effect === "zoom" ? 1 + (1 - p) * 1.8 : 1;
+
+  return (
+    <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-[#102f32]">
+      <img
+        src={imageUrl}
+        alt="Xem trước hiệu ứng ảnh Quiz"
+        className="absolute left-0 top-0 max-w-none"
+        style={{
+          width: `${100 / pixelScale}%`,
+          height: `${100 / pixelScale}%`,
+          objectFit: "contain",
+          objectPosition: "center",
+          transformOrigin: "top left",
+          transform: effect === "pixel" ? `scale(${pixelScale})` : `scale(${zoomScale})`,
+          imageRendering: effect === "pixel" ? "pixelated" : undefined,
+          filter: effect === "blur" ? `blur(${(1 - p) * 18}px)` : undefined,
+          clipPath,
+        }}
+      />
+
+      {/* Lớp che cho các hiệu ứng mở ô. */}
+      {tileCount > 0 && (
+        <div
+          className="absolute inset-0 grid"
+          style={{
+            gridTemplateColumns: `repeat(${tileSide}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${tileSide}, minmax(0, 1fr))`,
+            perspective: "700px",
+          }}
+        >
+          {Array.from({ length: tileCount }, (_, index) => {
+            const opened = revealedTiles.has(index);
+
+            return (
+              <div
+                key={`${effect}-${index}`}
+                className="border border-white/10 bg-[#214b50]"
+                style={{
+                  opacity: opened ? 0 : 1,
+                  transform: effect === "flip" && opened ? "rotateY(90deg)" : "rotateY(0deg)",
+                  transition: "opacity 180ms ease, transform 300ms ease",
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function QuizManagePage() {
@@ -174,6 +335,62 @@ function QuizManagePage() {
   const [position, setPosition] = useState(0);
   const [seconds, setSeconds] = useState(20);
   const [explanation, setExplanation] = useState("");
+  const [questionMediaUrl, setQuestionMediaUrl] = useState<string | null>(null);
+
+  const [questionMediaFile, setQuestionMediaFile] = useState<File | null>(null);
+
+  const [questionMediaPreviewUrl, setQuestionMediaPreviewUrl] = useState<string | null>(null);
+
+  // Tạo ảnh xem trước từ file trên máy.
+  // Tự giải phóng URL khi thay hoặc xóa ảnh.
+  useEffect(() => {
+    if (!questionMediaFile) {
+      setQuestionMediaPreviewUrl(null);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(questionMediaFile);
+
+    setQuestionMediaPreviewUrl(previewUrl);
+
+    return () => {
+      URL.revokeObjectURL(previewUrl);
+    };
+  }, [questionMediaFile]);
+
+  const questionImagePreview = questionMediaPreviewUrl ?? questionMediaUrl;
+
+  const [questionMediaEffect, setQuestionMediaEffect] = useState<QuizMediaEffect>("tiles9");
+
+  const [effectPreviewProgress, setEffectPreviewProgress] = useState(0);
+
+  const [effectPreviewPlaying, setEffectPreviewPlaying] = useState(false);
+
+  // Chạy thử hiệu ứng trong 4 giây.
+  useEffect(() => {
+    if (!effectPreviewPlaying || !questionImagePreview) {
+      return;
+    }
+
+    const startedAt = performance.now();
+    const previewDuration = 4000;
+
+    const timer = window.setInterval(() => {
+      const elapsed = performance.now() - startedAt;
+
+      const progress = Math.min(1, elapsed / previewDuration);
+
+      setEffectPreviewProgress(progress);
+
+      if (progress >= 1) {
+        setEffectPreviewPlaying(false);
+      }
+    }, 50);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [effectPreviewPlaying, questionImagePreview, questionMediaEffect]);
 
   const canManageQuestions = role === "owner" || role === "co_owner";
 
@@ -375,6 +592,11 @@ function QuizManagePage() {
     setPosition(nextPosition);
     setSeconds(20);
     setExplanation("");
+    setQuestionMediaUrl(null);
+    setQuestionMediaFile(null);
+    setQuestionMediaEffect("tiles9");
+    setEffectPreviewProgress(0);
+    setEffectPreviewPlaying(false);
   }
 
   function editQuestion(question: Question) {
@@ -385,6 +607,15 @@ function QuizManagePage() {
     setPosition(question.position);
     setSeconds(question.time_limit_seconds);
     setExplanation(question.explanation || "");
+    setQuestionMediaUrl(question.media_url ?? null);
+    setQuestionMediaFile(null);
+    const savedEffect = QUIZ_MEDIA_EFFECTS.find(
+      (item) => item.value === question.media_effect,
+    )?.value;
+
+    setQuestionMediaEffect(savedEffect ?? "tiles9");
+    setEffectPreviewProgress(0);
+    setEffectPreviewPlaying(false);
   }
 
   function removeChoice(index: number) {
@@ -447,15 +678,81 @@ function QuizManagePage() {
   // THÊM / SỬA CÂU HỎI
   // =========================================
 
+  function handleQuestionImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    // Cho phép chọn lại cùng một file.
+    event.target.value = "";
+
+    if (!file) return;
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Chỉ hỗ trợ JPG, PNG, WebP hoặc GIF.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Ảnh không được vượt quá 5 MB.");
+      return;
+    }
+
+    if (file.size === 0) {
+      toast.error("File ảnh đang trống.");
+      return;
+    }
+
+    setQuestionMediaFile(file);
+  }
+
   function handleSaveQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!selectedId || !canEditQuestions) return;
+    if (!selectedId || !canEditQuestions || busy) {
+      return;
+    }
 
     void runAction(async () => {
+      let mediaUrl = questionMediaUrl;
+
+      // =====================================
+      // TẢI ẢNH LÊN SUPABASE STORAGE
+      // =====================================
+
+      if (questionMediaFile) {
+        const file = questionMediaFile;
+
+        const uploadPermission = await requestQuizImageUpload({
+          data: {
+            quizId: selectedId,
+            mimeType: file.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
+            fileSize: file.size,
+          },
+        });
+
+        const { error: uploadError } = await supabase.storage
+          .from(uploadPermission.bucket)
+          .uploadToSignedUrl(uploadPermission.path, uploadPermission.token, file, {
+            contentType: file.type,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw new Error(`Không thể tải ảnh lên: ${uploadError.message}`);
+        }
+
+        mediaUrl = uploadPermission.publicUrl;
+      }
+
+      // =====================================
+      // LƯU CÂU HỎI VÀ ĐƯỜNG DẪN ẢNH
+      // =====================================
+
       await saveQuizQuestion({
         data: {
           quizId: selectedId,
+          mediaEffect: questionMediaEffect,
 
           ...(editingQuestionId ? { questionId: editingQuestionId } : {}),
 
@@ -466,6 +763,9 @@ function QuizManagePage() {
           points: 1000,
           timeLimitSeconds: seconds,
           explanation,
+
+          // null nghĩa là câu hỏi không có ảnh.
+          mediaUrl,
         },
       });
 
@@ -829,6 +1129,61 @@ function QuizManagePage() {
     );
   }
 
+  // =========================================
+  // ĐÓNG PHÒNG CHỜ / XÓA PHIÊN QUIZ CŨ
+  // =========================================
+
+  function handleCloseQuizSession(session: QuizSession) {
+    if (session.mode !== "live" || session.status !== "waiting") {
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Đóng phòng chờ ${session.join_code ?? "này"}? Người chơi sẽ không thể tham gia nữa.`,
+      )
+    ) {
+      return;
+    }
+
+    void runAction(async () => {
+      await controlLiveQuiz({
+        data: {
+          sessionId: session.id,
+          action: "close",
+        },
+      });
+
+      refreshDetail();
+    }, "Đã đóng phòng chờ Quiz.");
+  }
+
+  function handleDeleteQuizSession(session: QuizSession) {
+    if (!canManageQuestions) return;
+
+    if (session.status !== "finished" && session.status !== "closed") {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `XÓA VĨNH VIỄN phiên ${session.join_code ?? session.id}?\n\n` +
+        "Tất cả lượt tham gia, câu trả lời và điểm của phiên sẽ bị xóa. " +
+        "Bộ câu hỏi và các phiên khác vẫn được giữ.\n\nBạn chắc chắn muốn xóa?",
+    );
+
+    if (!confirmed) return;
+
+    void runAction(async () => {
+      await deleteQuizSession({
+        data: {
+          sessionId: session.id,
+        },
+      });
+
+      refreshDetail();
+    }, "Đã xóa phiên Quiz cũ.");
+  }
+
   async function copyCode(value: string) {
     try {
       await navigator.clipboard.writeText(value);
@@ -1182,6 +1537,9 @@ function QuizManagePage() {
                                         ? "Đã đóng"
                                         : "Bản nháp"}
                             </span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(session.created_at).toLocaleString("vi-VN")}
+                            </span>
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2">
@@ -1197,6 +1555,37 @@ function QuizManagePage() {
                                 <Copy className="ml-2 h-3.5 w-3.5" />
                               </Button>
                             )}
+
+                            {/* ĐÓNG PHÒNG CHỜ */}
+
+                            {session.mode === "live" && session.status === "waiting" && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={busy}
+                                onClick={() => handleCloseQuizSession(session)}
+                              >
+                                <X className="mr-1 h-4 w-4" />
+                                Đóng
+                              </Button>
+                            )}
+
+                            {/* XÓA PHIÊN ĐÃ KẾT THÚC */}
+
+                            {canManageQuestions &&
+                              (session.status === "finished" || session.status === "closed") && (
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  disabled={busy}
+                                  onClick={() => handleDeleteQuizSession(session)}
+                                >
+                                  <Trash2 className="mr-1 h-4 w-4" />
+                                  Xóa
+                                </Button>
+                              )}
 
                             {session.mode === "live" && (
                               <Button size="sm" asChild>
@@ -1218,8 +1607,9 @@ function QuizManagePage() {
                   )}
 
                   <p className="mt-3 text-xs text-muted-foreground">
-                    Mã phòng chỉ để chuẩn bị. Trang tham gia bằng QR và điều khiển Live sẽ bổ sung ở
-                    bước sau.
+                    Phiên đang hoạt động hoặc tạm dừng cần kết thúc từ màn hình Host. Chỉ
+                    Owner/Co-owner được xóa phiên đã kết thúc hoặc đã đóng. Xóa phiên cũng xóa lịch
+                    sử trả lời và điểm của phiên đó.
                   </p>
                 </div>
               )}
@@ -1567,6 +1957,162 @@ function QuizManagePage() {
                           />
                         </div>
 
+                        {/* =====================================
+    ẢNH / GIF MINH HỌA CÂU HỎI
+===================================== */}
+
+                        <div className="space-y-3 rounded-2xl border p-4">
+                          <div>
+                            <p className="text-sm font-semibold">Ảnh/GIF minh họa</p>
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Không bắt buộc · JPG, PNG, WebP, GIF · Tối đa 5 MB
+                            </p>
+                          </div>
+
+                          {questionImagePreview ? (
+                            <div className="relative overflow-hidden rounded-xl border bg-muted/40 p-3">
+                              <img
+                                src={questionImagePreview}
+                                alt="Xem trước ảnh câu hỏi Quiz"
+                                className="mx-auto max-h-72 w-full object-contain"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-8 text-muted-foreground">
+                              <ImagePlus className="h-9 w-9" />
+
+                              <p className="text-sm">Câu hỏi chưa có ảnh minh họa</p>
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted">
+                              <ImagePlus className="h-4 w-4" />
+
+                              {questionImagePreview ? "Thay ảnh" : "Chọn ảnh từ máy"}
+
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="sr-only"
+                                disabled={busy}
+                                onChange={handleQuestionImage}
+                              />
+                            </label>
+
+                            {questionImagePreview && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                disabled={busy}
+                                onClick={() => {
+                                  setQuestionMediaFile(null);
+                                  setQuestionMediaUrl(null);
+                                }}
+                              >
+                                <X className="mr-2 h-4 w-4" />
+                                Bỏ ảnh
+                              </Button>
+                            )}
+                          </div>
+
+                          <p className="text-xs text-muted-foreground">
+                            Ảnh chỉ được tải lên khi bạn bấm Lưu câu hỏi.
+                          </p>
+
+                          {/* =========================================
+    CHỌN HIỆU ỨNG ẢNH
+========================================= */}
+
+                          {questionImagePreview && (
+                            <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+                              <div className="space-y-2">
+                                <label
+                                  htmlFor="quiz-media-effect"
+                                  className="block text-sm font-semibold"
+                                >
+                                  Hiệu ứng ảnh khi chơi Quiz
+                                </label>
+
+                                <select
+                                  id="quiz-media-effect"
+                                  value={questionMediaEffect}
+                                  disabled={busy}
+                                  onChange={(event) => {
+                                    setQuestionMediaEffect(event.target.value as QuizMediaEffect);
+                                    setEffectPreviewPlaying(false);
+                                    setEffectPreviewProgress(0);
+                                  }}
+                                  className="flex h-11 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground"
+                                >
+                                  {QUIZ_MEDIA_EFFECTS.map((item) => (
+                                    <option key={item.value} value={item.value}>
+                                      {item.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* HÌNH ẢNH CHẠY HIỆU ỨNG */}
+
+                              <QuizImageEffectPreview
+                                imageUrl={questionImagePreview}
+                                effect={questionMediaEffect}
+                                progress={effectPreviewProgress}
+                              />
+
+                              {/* ĐIỀU KHIỂN XEM THỬ */}
+
+                              <div className="flex flex-wrap items-center gap-3">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  disabled={busy || effectPreviewPlaying}
+                                  onClick={() => {
+                                    setEffectPreviewProgress(0);
+                                    setEffectPreviewPlaying(true);
+                                  }}
+                                >
+                                  {effectPreviewPlaying ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Play className="mr-2 h-4 w-4" />
+                                  )}
+
+                                  {effectPreviewPlaying ? "Đang phát thử..." : "Xem thử hiệu ứng"}
+                                </Button>
+
+                                <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                                  {Math.round(effectPreviewProgress * 100)}%
+                                </span>
+                              </div>
+
+                              {/* KÉO ĐỂ XEM TỪNG MỐC THỜI GIAN */}
+
+                              <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={Math.round(effectPreviewProgress * 100)}
+                                disabled={busy}
+                                onChange={(event) => {
+                                  setEffectPreviewPlaying(false);
+                                  setEffectPreviewProgress(Number(event.target.value) / 100);
+                                }}
+                                className="w-full cursor-pointer accent-primary"
+                                aria-label="Tiến độ xem trước hiệu ứng ảnh"
+                              />
+
+                              <p className="text-xs leading-relaxed text-muted-foreground">
+                                Xem thử trong 4 giây hoặc kéo thanh tiến độ. Khi chơi Live, hiệu ứng
+                                sẽ cần đồng bộ với thời gian trả lời thực tế từ server.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
                         <div className="space-y-2">
                           <p className="text-sm font-medium">
                             Các lựa chọn (chọn ô tròn bên cạnh đáp án đúng)
@@ -1723,6 +2269,13 @@ function QuizManagePage() {
                       <h3 className="mb-2 text-center text-lg font-bold">
                         {questionTitle || "Thủ đô của Việt Nam là gì?"}
                       </h3>
+                      {questionImagePreview && (
+                        <img
+                          src={questionImagePreview}
+                          alt="Ảnh minh họa câu hỏi"
+                          className="mx-auto mb-4 max-h-72 w-full rounded-xl object-contain"
+                        />
+                      )}
 
                       <p className="mb-4 text-center text-xs text-neutral-400">
                         Chọn một đáp án đúng

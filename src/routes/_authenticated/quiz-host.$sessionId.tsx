@@ -8,7 +8,6 @@ import {
   Copy,
   Download,
   Expand,
-  ImageIcon,
   Loader2,
   Minimize,
   Pause,
@@ -22,6 +21,7 @@ import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { QuizMediaEffect } from "@/components/quiz/QuizMediaEffect";
 import { controlLiveQuiz, getLiveQuizHostState } from "@/lib/quiz.host.functions";
 
 export const Route = createFileRoute("/_authenticated/quiz-host/$sessionId")({
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_authenticated/quiz-host/$sessionId")({
 
 type LiveStatus = "waiting" | "active" | "paused" | "finished" | "closed";
 
-type LivePhase = "lobby" | "question" | "reveal" | "leaderboard" | "finished";
+type LivePhase = "lobby" | "intro" | "question" | "reveal" | "leaderboard" | "finished";
 
 type HostAction = "start" | "pause" | "resume" | "skip" | "close";
 
@@ -70,11 +70,13 @@ type HostState = {
     time_limit_seconds: number;
     explanation?: string | null;
     media_url?: string | null;
+    media_effect?: string | null;
   } | null;
 
   secondsLeft: number | null;
   phaseSecondsLeft: number | null;
   serverNow: string;
+  imageProgress?: number | null;
 
   leaderboard: Array<{
     rank: number;
@@ -117,6 +119,7 @@ function LiveQuizHostPage() {
   const stageRef = useRef<HTMLElement>(null);
   const qrRef = useRef<HTMLCanvasElement>(null);
   const fetchingRef = useRef(false);
+  const introSyncRef = useRef<string | null>(null);
 
   // =====================================
   // FULLSCREEN
@@ -225,6 +228,31 @@ function LiveQuizHostPage() {
     return () => window.clearInterval(timer);
   }, [phaseSeconds, legacySeconds, serverNow, status, phase]);
 
+  // =========================================
+  // HOST - ĐỒNG BỘ KHI INTRO KẾT THÚC
+  // =========================================
+
+  useEffect(() => {
+    if (!host || status !== "active" || phase !== "intro" || timeLeft === null || timeLeft > 0) {
+      return;
+    }
+
+    // Mỗi câu hỏi chỉ yêu cầu đồng bộ
+    // nhanh một lần khi Intro chạm 0.
+    const syncKey = [sessionId, host.session.questionNumber].join(":");
+
+    if (introSyncRef.current === syncKey) {
+      return;
+    }
+
+    introSyncRef.current = syncKey;
+
+    // getLiveQuizHostState sẽ gọi
+    // quiz_live_auto_control("tick").
+    // Server quyết định có mở đáp án chưa.
+    void refreshHost(true);
+  }, [host?.session.questionNumber, status, phase, timeLeft, sessionId, refreshHost, host]);
+
   // =====================================
   // ĐIỀU KHIỂN HOST
   // =====================================
@@ -305,7 +333,30 @@ function LiveQuizHostPage() {
 
   const question = host?.question;
 
-  const revealed = phase === "reveal" || phase === "leaderboard" || status === "finished";
+  const INTRO_DURATION = 9;
+  const WORD_REVEAL_DURATION = 5;
+
+  const introWords = question?.title.trim().split(/\s+/).filter(Boolean) ?? [];
+
+  // timeLeft lấy từ phaseSecondsLeft của server.
+  // Không tự khởi động một đồng hồ riêng.
+  const introRemaining = timeLeft === null ? null : Math.max(0, Math.min(INTRO_DURATION, timeLeft));
+
+  const introElapsed =
+    introRemaining === null ? 0 : Math.min(WORD_REVEAL_DURATION, INTRO_DURATION - introRemaining);
+
+  // Nội dung xuất hiện dần trong 4 giây đầu.
+  const introVisibleWords = Math.min(
+    introWords.length,
+    Math.max(1, Math.ceil(introWords.length * Math.min(1, introElapsed / WORD_REVEAL_DURATION))),
+  );
+
+  const revealed =
+    question != null &&
+    question.correct_index >= 0 &&
+    (phase === "reveal" || phase === "leaderboard" || status === "finished");
+
+  // Dùng để tạo hiệu ứng xuất hiện nội dung.
 
   const isPlaying = status === "active" || status === "paused";
 
@@ -314,18 +365,72 @@ function LiveQuizHostPage() {
     : 0;
 
   const timerDuration =
-    phase === "question"
-      ? (question?.time_limit_seconds ?? 20)
-      : phase === "reveal"
-        ? (host?.session.revealSeconds ?? 4)
-        : phase === "leaderboard"
-          ? (host?.session.leaderboardSeconds ?? 5)
-          : 0;
+    phase === "intro"
+      ? 5
+      : phase === "question"
+        ? (question?.time_limit_seconds ?? 20)
+        : phase === "reveal"
+          ? (host?.session.revealSeconds ?? 4)
+          : phase === "leaderboard"
+            ? (host?.session.leaderboardSeconds ?? 5)
+            : 0;
 
   const timerProgress =
     timerDuration > 0 && timeLeft !== null
       ? Math.max(0, Math.min(100, (timeLeft / timerDuration) * 100))
       : 0;
+
+  // ==========================================
+  // JOINLY QUIZ - ĐỒNG BỘ HIỆU ỨNG ẢNH HOST
+  // ==========================================
+
+  const imageProgress = (() => {
+    if (!question?.media_url || !host) {
+      return 0;
+    }
+
+    // Chuẩn hóa giá trị do server trả về.
+    const serverProgress =
+      typeof host.imageProgress === "number" && Number.isFinite(host.imageProgress)
+        ? Math.max(0, Math.min(1, host.imageProgress))
+        : null;
+
+    // INTRO 5 GIÂY:
+    // Chỉ hiện phần ảnh ban đầu.
+    if (phase === "intro") {
+      return 0;
+    }
+
+    // PAUSE:
+    // Lấy tiến độ đóng băng từ server.
+    if (status === "paused") {
+      return serverProgress ?? 0;
+    }
+
+    // QUESTION:
+    // Ảnh mở mượt theo đồng hồ đang chạy.
+    if (phase === "question") {
+      const duration = Math.max(1, question.time_limit_seconds);
+
+      const remaining = timeLeft ?? host.phaseSecondsLeft;
+
+      if (remaining === null) {
+        return serverProgress ?? 0;
+      }
+
+      return Math.max(0, Math.min(1, 1 - remaining / duration));
+    }
+
+    // REVEAL / LEADERBOARD:
+    // Giữ mốc ảnh do database xác nhận.
+    // Không tự động mở thành 100%
+    // nếu mọi người đã trả lời sớm.
+    if (phase === "reveal" || phase === "leaderboard") {
+      return serverProgress ?? 0;
+    }
+
+    return serverProgress ?? 0;
+  })();
 
   // =====================================
   // LOADING
@@ -362,6 +467,40 @@ function LiveQuizHostPage() {
       ref={stageRef}
       className="relative min-h-screen overflow-x-hidden bg-[#031e21] text-white"
     >
+      <style>{`
+  @keyframes joinly-title-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+      filter: blur(5px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+      filter: blur(0);
+    }
+  }
+
+  @keyframes joinly-answer-enter {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .joinly-title-word,
+    .joinly-answer-enter {
+      animation: none !important;
+      opacity: 1 !important;
+    }
+  }
+`}</style>
+
       {/* NỀN TRANG TRÍ */}
 
       <div
@@ -568,22 +707,28 @@ function LiveQuizHostPage() {
 
             <div className="mb-4 flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-white/65">
-                {phase === "question"
-                  ? "Đang trả lời"
-                  : phase === "reveal"
-                    ? "Đáp án & giải thích"
-                    : "Bảng xếp hạng"}
+                {phase === "intro"
+                  ? "Đang chuẩn bị câu hỏi"
+                  : phase === "question"
+                    ? "Đang trả lời"
+                    : phase === "reveal"
+                      ? "Đáp án & giải thích"
+                      : "Bảng xếp hạng"}
               </span>
 
               <div className="flex items-center gap-3">
-                <span className="text-xs text-white/65">
-                  {host.answeredCount}/{host.playerCount} đã trả lời
-                </span>
+                {phase !== "intro" && (
+                  <span className="text-xs text-white/65">
+                    {host.answeredCount}/{host.playerCount} đã trả lời
+                  </span>
+                )}
 
-                <span className="flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1.5 font-mono text-xl font-bold tabular-nums">
-                  <Clock3 className="h-4 w-4" />
-                  {timeText(timeLeft)}
-                </span>
+                {phase === "question" && (
+                  <span className="flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1.5 font-mono text-xl font-bold tabular-nums">
+                    <Clock3 className="h-4 w-4" />
+                    {timeText(timeLeft)}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -600,7 +745,107 @@ function LiveQuizHostPage() {
                 BẢNG XẾP HẠNG
             ================================= */}
 
-            {phase === "leaderboard" ? (
+            {phase === "intro" ? (
+              /* =======================================
+     HOST INTRO - 5 GIÂY CHUẨN BỊ
+     CHƯA HIỆN ĐÁP ÁN A/B/C/D
+  ======================================= */
+
+              <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center gap-7 py-8 text-center">
+                <div className="space-y-3">
+                  <span className="inline-flex rounded-full border border-[#AAF4DE]/30 bg-[#AAF4DE]/10 px-5 py-2 text-sm font-bold tracking-widest text-[#AAF4DE]">
+                    CHUẨN BỊ CÂU HỎI
+                  </span>
+
+                  <p className="text-base text-white/60">
+                    Câu {host.session.questionNumber}/{host.session.totalQuestions}
+                  </p>
+                </div>
+
+                {/* CÂU HỎI HIỆN DẦN TỪNG TỪ */}
+
+                <div className="w-full rounded-3xl border border-white/15 bg-white/6 px-6 py-8 shadow-2xl sm:px-12 sm:py-12">
+                  {question ? (
+                    <h1
+                      aria-label={question.title}
+                      className="text-2xl font-black leading-relaxed sm:text-4xl lg:text-5xl"
+                    >
+                      {introWords.map((word, index) => (
+                        <span
+                          key={`${question.id}-intro-${index}`}
+                          aria-hidden="true"
+                          className={`mr-[0.3em] inline-block transition-all duration-300 ${
+                            index < introVisibleWords
+                              ? "translate-y-0 opacity-100 blur-0"
+                              : "translate-y-3 opacity-0 blur-sm"
+                          }`}
+                        >
+                          {word}
+                        </span>
+                      ))}
+                    </h1>
+                  ) : (
+                    <p className="text-xl text-white/60">Đang tải nội dung câu hỏi...</p>
+                  )}
+                </div>
+
+                {/* CHỈ HIỆN ẢNH NẾU CÂU HỎI CÓ ẢNH */}
+
+                {question?.media_url?.trim() && (
+                  <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/15 bg-white/5 p-3">
+                    <QuizMediaEffect
+                      src={question.media_url}
+                      effect={question.media_effect ?? "tiles9"}
+                      progress={0}
+                      seed={question.id}
+                      alt="Ảnh minh họa câu hỏi"
+                    />
+                  </div>
+                )}
+
+                {/* 4 GIÂY XEM TRƯỚC ĐÁP ÁN */}
+
+                {introRemaining !== null &&
+                  introRemaining <= 4 &&
+                  question &&
+                  question.options.length > 0 && (
+                    <div className="grid w-full grid-cols-1 gap-3 text-left sm:grid-cols-2">
+                      {question.options.map((answer, index) => (
+                        <div
+                          key={`${question.id}-intro-answer-${index}`}
+                          style={{
+                            backgroundColor: COLORS[index] ?? "#E5E7EB",
+                          }}
+                          className="flex min-h-24 items-center gap-4 rounded-3xl border-[3px] border-[#09282a] px-5 py-5 text-lg font-black text-[#082327] shadow-[0_5px_0_rgba(0,0,0,0.45)] sm:min-h-28 sm:text-xl"
+                        >
+                          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-black/10 text-xl font-black">
+                            {String.fromCharCode(65 + index)}
+                          </span>
+
+                          <span className="min-w-0 flex-1 wrap-break-word">{answer}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                {/* CHƯA MỞ ĐÁP ÁN */}
+
+                <div className="space-y-2">
+                  <p className="text-lg font-bold text-[#AAF4DE]">
+                    {introRemaining === null
+                      ? "Đang đồng bộ với máy chủ..."
+                      : introRemaining > 0
+                        ? "Các đáp án sắp xuất hiện..."
+                        : "Đang mở câu hỏi..."}
+                  </p>
+
+                  <p className="text-sm text-white/60">
+                    Đồng hồ trả lời chỉ bắt đầu khi tất cả thiết bị được chuyển sang giai đoạn câu
+                    hỏi.
+                  </p>
+                </div>
+              </div>
+            ) : phase === "leaderboard" ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-6 py-8">
                 <Trophy className="h-12 w-12 text-yellow-300" />
 
@@ -638,88 +883,160 @@ function LiveQuizHostPage() {
                   CÂU HỎI + ĐÁP ÁN + HÌNH
               ================================= */
 
-              <div className="grid flex-1 items-start gap-6 lg:grid-cols-[43%_57%] lg:gap-8">
-                {/* BÊN TRÁI */}
+              <div
+                key={question.id}
+                className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-5 pb-6 sm:gap-7"
+              >
+                {/* =====================================
+      CÂU HỎI XUẤT HIỆN TRƯỚC
+  ===================================== */}
 
-                <div className="flex flex-col gap-5">
-                  <h1 className="text-center text-2xl font-black leading-tight drop-shadow-[2px_3px_0_#000] sm:text-4xl lg:text-4xl">
+                <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-6 text-center shadow-xl sm:px-10 sm:py-8">
+                  <p className="mb-4 text-xs font-bold uppercase tracking-[0.3em] text-[#AAF4DE]">
+                    Câu hỏi {host.session.questionNumber}
+                  </p>
+
+                  <h1 className="text-2xl font-extrabold leading-snug sm:text-4xl lg:text-5xl">
                     {question.title}
                   </h1>
-
-                  <div className="grid gap-3">
-                    {question.options.map((answer, index) => {
-                      const correct = index === question.correct_index;
-
-                      return (
-                        <div
-                          key={`${question.id}-${index}`}
-                          style={{
-                            backgroundColor: COLORS[index] ?? "#E5E7EB",
-                          }}
-                          className={`relative flex min-h-17.5 items-center justify-center rounded-[28px] border-[3px] border-[#082426] px-5 py-4 text-center text-lg font-black text-[#091c22] shadow-[0_4px_0_#000] transition-opacity sm:min-h-19.5 sm:text-xl ${
-                            revealed && !correct ? "opacity-25" : ""
-                          } ${revealed && correct ? "ring-4 ring-white" : ""}`}
-                        >
-                          <span>{answer}</span>
-
-                          {revealed && correct && (
-                            <Check className="absolute right-4 h-6 w-6 rounded-full bg-[#05291c] p-1 text-white" />
-                          )}
-
-                          {revealed && (
-                            <span className="absolute bottom-1 right-4 text-xs text-[#091c22]/70">
-                              {host.answerCounts[index] ?? 0} lượt
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 text-xs text-white/60">
-                    <span>
-                      Câu {host.session.questionNumber}/{host.session.totalQuestions}
-                    </span>
-
-                    <span>{progress}% hoàn thành</span>
-                  </div>
                 </div>
 
-                {/* BÊN PHẢI: ẢNH / GIF */}
+                {/* =====================================
+      BỐ CỤC THEO VIỆC CÓ ẢNH HAY KHÔNG
+  ===================================== */}
 
-                <div className="relative flex min-h-75 items-center justify-center overflow-hidden rounded-3xl border-[3px] border-black bg-[#10373c] lg:min-h-137.5">
-                  {question.media_url ? (
-                    <img
-                      src={question.media_url}
-                      alt="Minh họa câu hỏi"
-                      className="absolute inset-0 h-full w-full object-contain"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center gap-4 text-center text-white/50">
-                      <ImageIcon className="h-20 w-20" />
-                      <span className="text-lg">Hình ảnh / GIF câu hỏi</span>
+                <div
+                  className={
+                    question.media_url?.trim()
+                      ? "grid flex-1 items-stretch gap-5 lg:grid-cols-2 lg:gap-7"
+                      : "flex flex-1 flex-col justify-center"
+                  }
+                >
+                  {/* DANH SÁCH ĐÁP ÁN */}
+
+                  <div className="flex flex-col justify-center gap-4">
+                    <div
+                      className={
+                        question.media_url?.trim()
+                          ? "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1"
+                          : "grid grid-cols-1 gap-4 sm:grid-cols-2"
+                      }
+                    >
+                      {question.options.map((answer, index) => {
+                        const correct = index === question.correct_index;
+
+                        return (
+                          <div
+                            key={`${question.id}-answer-${index}`}
+                            className={`
+                joinly-answer-enter
+                relative flex min-h-24 items-center gap-4
+                rounded-3xl border-[3px] border-[#09282a]
+                px-5 py-5 text-left text-lg font-black
+                text-[#082327]
+                shadow-[0_5px_0_rgba(0,0,0,0.45)]
+                transition-opacity sm:min-h-28 sm:text-xl
+                ${
+                  revealed
+                    ? correct
+                      ? "opacity-100 ring-4 ring-white"
+                      : "opacity-25"
+                    : "opacity-100"
+                }
+                    `}
+
+                            style={{
+                              backgroundColor: COLORS[index] ?? "#E5E7EB",
+                            }}
+                          >
+                            {/* KÝ TỰ A/B/C/D */}
+
+                            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-black/10 text-xl font-black">
+                              {String.fromCharCode(65 + index)}
+                            </span>
+
+                            {/* NỘI DUNG ĐÁP ÁN */}
+
+                            <span className="min-w-0 flex-1 wrap-break-word">{answer}</span>
+
+                            {/* ĐÁP ÁN ĐÚNG SAU KHI CÔNG BỐ */}
+
+                            {revealed && correct && (
+                              <Check className="size-7 shrink-0 rounded-full bg-[#064b32] p-1 text-white" />
+                            )}
+
+                            {revealed && (
+                              <span className="absolute bottom-1 right-5 text-xs font-medium text-[#082327]/70">
+                                {host.answerCounts[index] ?? 0} lượt
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
 
-                  {/* TỰ HIỆN ĐÁP ÁN */}
+                    {/* KHÔNG CÓ ẢNH: GIẢI THÍCH BÊN DƯỚI */}
 
-                  {phase === "reveal" && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/75 p-8 text-center">
-                      <p className="text-sm font-bold uppercase tracking-[0.3em] text-[#AAF4DE]">
-                        Đáp án chính xác
-                      </p>
-
-                      <h2 className="text-2xl font-black sm:text-4xl">
-                        {question.options[question.correct_index]}
-                      </h2>
-
-                      {question.explanation && (
-                        <p className="max-w-2xl text-lg leading-relaxed text-white/90">
-                          {question.explanation}
+                    {!question.media_url?.trim() && revealed && (
+                      <div className="rounded-2xl border border-[#AAF4DE]/30 bg-[#AAF4DE]/10 p-5 text-center">
+                        <p className="font-bold text-[#AAF4DE]">
+                          Đáp án: {question.options[question.correct_index]}
                         </p>
+
+                        {question.explanation && (
+                          <p className="mt-2 text-sm leading-relaxed text-white/85 sm:text-base">
+                            {question.explanation}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* =====================================
+                        CHỈ HIỆN KHUNG ẢNH KHI CÓ ẢNH
+                  ===================================== */}
+
+                  {question.media_url?.trim() && (
+                    <div className="relative flex min-h-64 items-center justify-center overflow-hidden rounded-3xl border border-white/15 bg-[#14383c] lg:min-h-100">
+                      <QuizMediaEffect
+                        src={question.media_url}
+                        effect={question.media_effect ?? "tiles9"}
+                        progress={imageProgress}
+                        seed={question.id}
+                        alt="Hình minh họa câu hỏi"
+                      />
+
+                      {/* CÔNG BỐ ĐÁP ÁN KHI HẾT GIỜ */}
+
+                      {revealed && phase === "reveal" && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#031e21]/90 p-6 text-center">
+                          <p className="text-sm font-bold uppercase tracking-widest text-[#AAF4DE]">
+                            Đáp án chính xác
+                          </p>
+
+                          <h2 className="text-2xl font-black sm:text-3xl">
+                            {question.options[question.correct_index]}
+                          </h2>
+
+                          {question.explanation && (
+                            <p className="max-w-xl text-base leading-relaxed text-white/85">
+                              {question.explanation}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
+                </div>
+
+                {/* TIẾN ĐỘ */}
+
+                <div className="flex items-center justify-between text-xs text-white/60">
+                  <span>
+                    Câu {host.session.questionNumber}/{host.session.totalQuestions}
+                  </span>
+
+                  <span>{progress}% hoàn thành</span>
                 </div>
               </div>
             ) : (

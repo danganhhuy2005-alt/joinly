@@ -11,7 +11,7 @@ type AuthClient = SupabaseClient<Database>;
 
 type LiveStatus = "waiting" | "active" | "paused" | "finished" | "closed";
 
-type LivePhase = "lobby" | "question" | "reveal" | "leaderboard" | "finished";
+type LivePhase = "lobby" | "intro" | "question" | "reveal" | "leaderboard" | "finished";
 
 type LiveSession = {
   id: string;
@@ -48,6 +48,9 @@ type HostQuestion = {
   correct_index: number;
   explanation: string | null;
   media_url: string | null;
+
+  // Hiệu ứng ảnh được BTC chọn khi tạo câu hỏi.
+  media_effect: string;
 };
 
 const SESSION_COLUMNS =
@@ -323,9 +326,11 @@ export const getLiveQuizHostState = createServerFn({
 
     const { data: questionData, error: questionError } = await db
       .from("quiz_questions")
+
       .select(
-        "id,title,options,position,points,time_limit_seconds,correct_index,explanation,media_url",
+        "id,title,options,position,points,time_limit_seconds,correct_index,explanation,media_url,media_effect",
       )
+
       .eq("quiz_id", quiz.id)
       .order("position", {
         ascending: true,
@@ -356,21 +361,64 @@ export const getLiveQuizHostState = createServerFn({
         ? Date.parse(session.question_started_at) + originalQuestion.time_limit_seconds * 1000
         : null;
 
-    const canRevealAnswer =
-      questionDeadlineMs !== null &&
-      Date.now() >= questionDeadlineMs &&
-      (session.results_revealed || session.status === "finished");
+    // ==========================================
+    // CÔNG BỐ ĐÁP ÁN LIVE QUIZ
+    // ==========================================
+
+    // Với Auto Play, database quyết định
+    // khi nào chuyển sang công bố kết quả.
+    //
+    // Có thể công bố khi:
+    // - Câu hỏi hết thời gian.
+    // - Tất cả người chơi đã trả lời.
+    //
+    // Không công bố trong Intro hoặc Question.
+
+    const isAutoRevealPhase =
+      session.live_phase === "reveal" ||
+      session.live_phase === "leaderboard" ||
+      session.live_phase === "finished";
+
+    const canRevealAnswer = session.auto_play_enabled
+      ? session.results_revealed && isAutoRevealPhase
+      : questionDeadlineMs !== null &&
+        Date.now() >= questionDeadlineMs &&
+        (session.results_revealed || session.status === "finished");
 
     // Câu hỏi được gửi cho Host.
     // Không sửa dữ liệu gốc trong database.
+
+    // ==========================================
+    // CHỈ HIỆN NỘI DUNG TRONG INTRO
+    // ==========================================
+
+    const isIntro = session.auto_play_enabled && session.live_phase === "intro";
+
+    const introRemaining = isIntro
+      ? secondsRemaining(
+          session.phase_started_at,
+          9,
+          session.status === "paused" && session.paused_at
+            ? Date.parse(session.paused_at)
+            : Date.now(),
+        )
+      : null;
+
+    const hideIntroOptions = isIntro && (introRemaining === null || introRemaining > 4);
+
     const question: HostQuestion | null = originalQuestion
       ? {
           ...originalQuestion,
 
-          options: optionOrder.map((originalIndex) => originalQuestion.options[originalIndex]),
+          // Trong 5 giây chuẩn bị,
+          // chỉ gửi nội dung và ảnh câu hỏi.
+          // Chưa gửi A/B/C/D.
+          options: hideIntroOptions
+            ? []
+            : optionOrder.map((originalIndex) => originalQuestion.options[originalIndex]),
 
-          // -1 nghĩa là chưa được công bố.
-          // Không gửi đáp án đúng sớm cho trình duyệt.
+          // Không gửi đáp án đúng
+          // trước khi database công bố.
           correct_index: canRevealAnswer ? optionOrder.indexOf(originalQuestion.correct_index) : -1,
 
           explanation: canRevealAnswer ? originalQuestion.explanation : null,
@@ -413,8 +461,9 @@ export const getLiveQuizHostState = createServerFn({
     if (question) {
       const options = Array.isArray(question.options) ? question.options : [];
 
-      if (session.status === "waiting") {
+      if (session.status === "waiting" || isIntro) {
         answerCounts = Array<number>(options.length).fill(0);
+        answeredCount = 0;
       } else {
         const stats = await getCurrentAnswerCounts(db, session.id, question.id, options.length);
 
@@ -438,6 +487,49 @@ export const getLiveQuizHostState = createServerFn({
     const stopAt =
       session.status === "paused" && session.paused_at ? Date.parse(session.paused_at) : now;
 
+    // ==========================================
+    // LIVE QUIZ - TIẾN ĐỘ ẢNH CHO HOST
+    // ==========================================
+
+    let imageProgress = 0;
+
+    if (question?.media_url && session.question_started_at && session.live_phase !== "intro") {
+      const questionStartMs = Date.parse(session.question_started_at);
+
+      const durationMs = Math.max(1, question.time_limit_seconds) * 1000;
+
+      // Mặc định lấy thời điểm hiện tại.
+      // Khi Pause sẽ lấy paused_at.
+      let imageStopMs = stopAt;
+
+      // ======================================
+      // KHI ĐÃ CÔNG BỐ ĐÁP ÁN
+      // ======================================
+
+      if (session.results_revealed && session.revealed_at) {
+        imageStopMs = Date.parse(session.revealed_at);
+
+        // phase_started_at được dịch khi
+        // Pause/Resume, nên cần dùng cùng
+        // hệ quy chiếu với question_started_at.
+        const phaseStartMs = session.phase_started_at ? Date.parse(session.phase_started_at) : NaN;
+
+        if (session.auto_play_enabled && Number.isFinite(phaseStartMs)) {
+          if (session.live_phase === "reveal") {
+            imageStopMs = phaseStartMs;
+          }
+
+          if (session.live_phase === "leaderboard") {
+            imageStopMs = phaseStartMs - session.reveal_seconds * 1000;
+          }
+        }
+      }
+
+      if (Number.isFinite(questionStartMs) && Number.isFinite(imageStopMs)) {
+        imageProgress = Math.max(0, Math.min(1, (imageStopMs - questionStartMs) / durationMs));
+      }
+    }
+
     // Đồng hồ câu hỏi cũ,
     // giữ để tương thích với Host hiện tại.
 
@@ -459,7 +551,10 @@ export const getLiveQuizHostState = createServerFn({
 
     let phaseDuration: number | null = null;
 
-    if (session.live_phase === "question" && question) {
+    if (session.live_phase === "intro") {
+      // 5 giây chuẩn bị, chưa tính điểm.
+      phaseDuration = 9;
+    } else if (session.live_phase === "question" && question) {
       phaseDuration = question.time_limit_seconds;
     } else if (session.live_phase === "reveal") {
       phaseDuration = session.reveal_seconds;
@@ -522,6 +617,10 @@ export const getLiveQuizHostState = createServerFn({
       answerCounts,
 
       question,
+
+      // Tiến độ ảnh 0..1 từ server.
+      // Đóng băng khi Pause hoặc Reveal.
+      imageProgress,
 
       secondsLeft,
       phaseSecondsLeft,

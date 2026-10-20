@@ -90,6 +90,18 @@ function PrivacyPage() {
 
           <section>
             <h2 className="text-xl font-semibold text-foreground">4. Các dịch vụ bên thứ ba</h2>
+            <p className="mt-2">
+              Joinly sử dụng Google Analytics 4 để thống kê lượt truy cập khi người dùng đồng ý.
+              Người dùng có thể từ chối hoặc thay đổi lựa chọn bất kỳ lúc nào.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("joinly:analytics-settings"))}
+              className="mt-3 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground"
+            >
+              Thay đổi lựa chọn thống kê
+            </button>
 
             <p className="mt-2">
               Joinly sử dụng một số dịch vụ bên thứ ba để vận hành hệ thống, bao gồm Google OAuth để

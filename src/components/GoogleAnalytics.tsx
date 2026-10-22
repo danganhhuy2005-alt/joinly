@@ -9,7 +9,7 @@ type Consent = "accepted" | "rejected" | null;
 
 declare global {
   interface Window {
-    dataLayer?: unknown[][];
+    dataLayer?: unknown[];
     gtag?: (...args: unknown[]) => void;
   }
 }
@@ -33,8 +33,10 @@ function initializeGA4(pageLocation: string): void {
   if (!/^G-[A-Z0-9]+$/.test(GA_ID)) return;
 
   window.dataLayer ??= [];
-  window.gtag ??= (...args: unknown[]) => {
-    (window.dataLayer ??= []).push(args);
+  // Google tag requires the real `arguments` object, not a plain Array.
+  // A rest-parameter arrow function silently leaves GA4 events unsent.
+  window.gtag ??= function gtag(..._args: unknown[]) {
+    (window.dataLayer ??= []).push(arguments);
   };
 
   // Không dùng Google Analytics cho quảng cáo.

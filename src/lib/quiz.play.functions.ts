@@ -983,7 +983,9 @@ export const getQuizPlayerState = createServerFn({ method: "POST" })
       };
     }
 
-    const question = await questionAt(db, attempt.quiz_id, session.current_question);
+    // Self-paced: mỗi người chơi có tiến độ riêng.
+// "answered" được đếm từ quiz_answers theo attempt.id.
+    const question = await questionAt(db, attempt.quiz_id, answered);
 
     if (!question) {
       throw new Error("Không thể tải câu hỏi tiếp theo.");

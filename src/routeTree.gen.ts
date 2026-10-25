@@ -15,12 +15,15 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AuthenticatedCreateEventRouteImport } from './routes/_authenticated/create-event'
+import { Route as AuthenticatedDiscoverRouteImport } from './routes/_authenticated/discover'
 import { Route as AuthenticatedMonthlyCheckoutRouteImport } from './routes/_authenticated/monthly-checkout'
 import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
+import { Route as AuthenticatedMyParticipationsRouteImport } from './routes/_authenticated/my-participations'
 import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/plans'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as FeedbackFormIdRouteImport } from './routes/feedback.$formId'
 import { Route as JoinIdRouteImport } from './routes/join.$id'
+import { Route as QnaEventIdRouteImport } from './routes/qna.$eventId'
 import { Route as QuizJoinCodeRouteImport } from './routes/quiz.$joinCode'
 import { Route as AuthenticatedCheckInIdRouteImport } from './routes/_authenticated/check-in.$id'
 import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
@@ -36,6 +39,8 @@ import { Route as AuthenticatedDashboardIdMembersRouteImport } from './routes/_a
 import { Route as AuthenticatedDashboardIdQuizRouteImport } from './routes/_authenticated/dashboard_.$id.quiz'
 import { Route as JoinIdConfirmTokenRouteImport } from './routes/join.$id.confirm.$token'
 import { Route as AuthenticatedDashboardIdAllowlistTsxRouteImport } from './routes/_authenticated/dashboard_.$id.allowlist.tsx'
+import { Route as AuthenticatedDashboardIdQuizEditorQuizIdRouteImport } from './routes/_authenticated/dashboard_.$id.quiz-editor.$quizId'
+import { Route as AuthenticatedDashboardIdQuizSessionsQuizIdRouteImport } from './routes/_authenticated/dashboard_.$id.quiz-sessions.$quizId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -67,6 +72,11 @@ const AuthenticatedCreateEventRoute =
     path: '/create-event',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDiscoverRoute = AuthenticatedDiscoverRouteImport.update({
+  id: '/discover',
+  path: '/discover',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedMonthlyCheckoutRoute =
   AuthenticatedMonthlyCheckoutRouteImport.update({
     id: '/monthly-checkout',
@@ -78,6 +88,12 @@ const AuthenticatedMyEventsRoute = AuthenticatedMyEventsRouteImport.update({
   path: '/my-events',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMyParticipationsRoute =
+  AuthenticatedMyParticipationsRouteImport.update({
+    id: '/my-participations',
+    path: '/my-participations',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPlansRoute = AuthenticatedPlansRouteImport.update({
   id: '/plans',
   path: '/plans',
@@ -96,6 +112,11 @@ const FeedbackFormIdRoute = FeedbackFormIdRouteImport.update({
 const JoinIdRoute = JoinIdRouteImport.update({
   id: '/join/$id',
   path: '/join/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QnaEventIdRoute = QnaEventIdRouteImport.update({
+  id: '/qna/$eventId',
+  path: '/qna/$eventId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const QuizJoinCodeRoute = QuizJoinCodeRouteImport.update({
@@ -181,6 +202,18 @@ const AuthenticatedDashboardIdAllowlistTsxRoute =
     path: '/dashboard/$id/allowlist/tsx',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDashboardIdQuizEditorQuizIdRoute =
+  AuthenticatedDashboardIdQuizEditorQuizIdRouteImport.update({
+    id: '/dashboard_/$id/quiz-editor/$quizId',
+    path: '/dashboard/$id/quiz-editor/$quizId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDashboardIdQuizSessionsQuizIdRoute =
+  AuthenticatedDashboardIdQuizSessionsQuizIdRouteImport.update({
+    id: '/dashboard_/$id/quiz-sessions/$quizId',
+    path: '/dashboard/$id/quiz-sessions/$quizId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -188,12 +221,15 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
+  '/discover': typeof AuthenticatedDiscoverRoute
   '/monthly-checkout': typeof AuthenticatedMonthlyCheckoutRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
+  '/my-participations': typeof AuthenticatedMyParticipationsRoute
   '/plans': typeof AuthenticatedPlansRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/feedback/$formId': typeof FeedbackFormIdRoute
   '/join/$id': typeof JoinIdRouteWithChildren
+  '/qna/$eventId': typeof QnaEventIdRoute
   '/quiz/$joinCode': typeof QuizJoinCodeRoute
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -209,6 +245,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/$id/quiz': typeof AuthenticatedDashboardIdQuizRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
   '/dashboard/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
+  '/dashboard/$id/quiz-editor/$quizId': typeof AuthenticatedDashboardIdQuizEditorQuizIdRoute
+  '/dashboard/$id/quiz-sessions/$quizId': typeof AuthenticatedDashboardIdQuizSessionsQuizIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -216,11 +254,14 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/create-event': typeof AuthenticatedCreateEventRoute
+  '/discover': typeof AuthenticatedDiscoverRoute
   '/monthly-checkout': typeof AuthenticatedMonthlyCheckoutRoute
   '/my-events': typeof AuthenticatedMyEventsRoute
+  '/my-participations': typeof AuthenticatedMyParticipationsRoute
   '/plans': typeof AuthenticatedPlansRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/feedback/$formId': typeof FeedbackFormIdRoute
+  '/qna/$eventId': typeof QnaEventIdRoute
   '/quiz/$joinCode': typeof QuizJoinCodeRoute
   '/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -236,6 +277,8 @@ export interface FileRoutesByTo {
   '/dashboard/$id/quiz': typeof AuthenticatedDashboardIdQuizRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
   '/dashboard/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
+  '/dashboard/$id/quiz-editor/$quizId': typeof AuthenticatedDashboardIdQuizEditorQuizIdRoute
+  '/dashboard/$id/quiz-sessions/$quizId': typeof AuthenticatedDashboardIdQuizSessionsQuizIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -245,12 +288,15 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/_authenticated/create-event': typeof AuthenticatedCreateEventRoute
+  '/_authenticated/discover': typeof AuthenticatedDiscoverRoute
   '/_authenticated/monthly-checkout': typeof AuthenticatedMonthlyCheckoutRoute
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
+  '/_authenticated/my-participations': typeof AuthenticatedMyParticipationsRoute
   '/_authenticated/plans': typeof AuthenticatedPlansRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/feedback/$formId': typeof FeedbackFormIdRoute
   '/join/$id': typeof JoinIdRouteWithChildren
+  '/qna/$eventId': typeof QnaEventIdRoute
   '/quiz/$joinCode': typeof QuizJoinCodeRoute
   '/_authenticated/check-in/$id': typeof AuthenticatedCheckInIdRoute
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
@@ -266,6 +312,8 @@ export interface FileRoutesById {
   '/_authenticated/dashboard_/$id/quiz': typeof AuthenticatedDashboardIdQuizRoute
   '/join/$id/confirm/$token': typeof JoinIdConfirmTokenRoute
   '/_authenticated/dashboard_/$id/allowlist/tsx': typeof AuthenticatedDashboardIdAllowlistTsxRoute
+  '/_authenticated/dashboard_/$id/quiz-editor/$quizId': typeof AuthenticatedDashboardIdQuizEditorQuizIdRoute
+  '/_authenticated/dashboard_/$id/quiz-sessions/$quizId': typeof AuthenticatedDashboardIdQuizSessionsQuizIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -275,12 +323,15 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/create-event'
+    | '/discover'
     | '/monthly-checkout'
     | '/my-events'
+    | '/my-participations'
     | '/plans'
     | '/profile'
     | '/feedback/$formId'
     | '/join/$id'
+    | '/qna/$eventId'
     | '/quiz/$joinCode'
     | '/check-in/$id'
     | '/dashboard/$id'
@@ -296,6 +347,8 @@ export interface FileRouteTypes {
     | '/dashboard/$id/quiz'
     | '/join/$id/confirm/$token'
     | '/dashboard/$id/allowlist/tsx'
+    | '/dashboard/$id/quiz-editor/$quizId'
+    | '/dashboard/$id/quiz-sessions/$quizId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -303,11 +356,14 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/create-event'
+    | '/discover'
     | '/monthly-checkout'
     | '/my-events'
+    | '/my-participations'
     | '/plans'
     | '/profile'
     | '/feedback/$formId'
+    | '/qna/$eventId'
     | '/quiz/$joinCode'
     | '/check-in/$id'
     | '/dashboard/$id'
@@ -323,6 +379,8 @@ export interface FileRouteTypes {
     | '/dashboard/$id/quiz'
     | '/join/$id/confirm/$token'
     | '/dashboard/$id/allowlist/tsx'
+    | '/dashboard/$id/quiz-editor/$quizId'
+    | '/dashboard/$id/quiz-sessions/$quizId'
   id:
     | '__root__'
     | '/'
@@ -331,12 +389,15 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/_authenticated/create-event'
+    | '/_authenticated/discover'
     | '/_authenticated/monthly-checkout'
     | '/_authenticated/my-events'
+    | '/_authenticated/my-participations'
     | '/_authenticated/plans'
     | '/_authenticated/profile'
     | '/feedback/$formId'
     | '/join/$id'
+    | '/qna/$eventId'
     | '/quiz/$joinCode'
     | '/_authenticated/check-in/$id'
     | '/_authenticated/dashboard/$id'
@@ -352,6 +413,8 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard_/$id/quiz'
     | '/join/$id/confirm/$token'
     | '/_authenticated/dashboard_/$id/allowlist/tsx'
+    | '/_authenticated/dashboard_/$id/quiz-editor/$quizId'
+    | '/_authenticated/dashboard_/$id/quiz-sessions/$quizId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -362,6 +425,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   FeedbackFormIdRoute: typeof FeedbackFormIdRoute
   JoinIdRoute: typeof JoinIdRouteWithChildren
+  QnaEventIdRoute: typeof QnaEventIdRoute
   QuizJoinCodeRoute: typeof QuizJoinCodeRoute
   ApiSepayWebhookRoute: typeof ApiSepayWebhookRoute
 }
@@ -410,6 +474,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCreateEventRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/discover': {
+      id: '/_authenticated/discover'
+      path: '/discover'
+      fullPath: '/discover'
+      preLoaderRoute: typeof AuthenticatedDiscoverRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/monthly-checkout': {
       id: '/_authenticated/monthly-checkout'
       path: '/monthly-checkout'
@@ -422,6 +493,13 @@ declare module '@tanstack/react-router' {
       path: '/my-events'
       fullPath: '/my-events'
       preLoaderRoute: typeof AuthenticatedMyEventsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/my-participations': {
+      id: '/_authenticated/my-participations'
+      path: '/my-participations'
+      fullPath: '/my-participations'
+      preLoaderRoute: typeof AuthenticatedMyParticipationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/plans': {
@@ -450,6 +528,13 @@ declare module '@tanstack/react-router' {
       path: '/join/$id'
       fullPath: '/join/$id'
       preLoaderRoute: typeof JoinIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/qna/$eventId': {
+      id: '/qna/$eventId'
+      path: '/qna/$eventId'
+      fullPath: '/qna/$eventId'
+      preLoaderRoute: typeof QnaEventIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/quiz/$joinCode': {
@@ -557,13 +642,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardIdAllowlistTsxRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/dashboard_/$id/quiz-editor/$quizId': {
+      id: '/_authenticated/dashboard_/$id/quiz-editor/$quizId'
+      path: '/dashboard/$id/quiz-editor/$quizId'
+      fullPath: '/dashboard/$id/quiz-editor/$quizId'
+      preLoaderRoute: typeof AuthenticatedDashboardIdQuizEditorQuizIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard_/$id/quiz-sessions/$quizId': {
+      id: '/_authenticated/dashboard_/$id/quiz-sessions/$quizId'
+      path: '/dashboard/$id/quiz-sessions/$quizId'
+      fullPath: '/dashboard/$id/quiz-sessions/$quizId'
+      preLoaderRoute: typeof AuthenticatedDashboardIdQuizSessionsQuizIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCreateEventRoute: typeof AuthenticatedCreateEventRoute
+  AuthenticatedDiscoverRoute: typeof AuthenticatedDiscoverRoute
   AuthenticatedMonthlyCheckoutRoute: typeof AuthenticatedMonthlyCheckoutRoute
   AuthenticatedMyEventsRoute: typeof AuthenticatedMyEventsRoute
+  AuthenticatedMyParticipationsRoute: typeof AuthenticatedMyParticipationsRoute
   AuthenticatedPlansRoute: typeof AuthenticatedPlansRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedCheckInIdRoute: typeof AuthenticatedCheckInIdRoute
@@ -576,12 +677,16 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardIdMembersRoute: typeof AuthenticatedDashboardIdMembersRoute
   AuthenticatedDashboardIdQuizRoute: typeof AuthenticatedDashboardIdQuizRoute
   AuthenticatedDashboardIdAllowlistTsxRoute: typeof AuthenticatedDashboardIdAllowlistTsxRoute
+  AuthenticatedDashboardIdQuizEditorQuizIdRoute: typeof AuthenticatedDashboardIdQuizEditorQuizIdRoute
+  AuthenticatedDashboardIdQuizSessionsQuizIdRoute: typeof AuthenticatedDashboardIdQuizSessionsQuizIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCreateEventRoute: AuthenticatedCreateEventRoute,
+  AuthenticatedDiscoverRoute: AuthenticatedDiscoverRoute,
   AuthenticatedMonthlyCheckoutRoute: AuthenticatedMonthlyCheckoutRoute,
   AuthenticatedMyEventsRoute: AuthenticatedMyEventsRoute,
+  AuthenticatedMyParticipationsRoute: AuthenticatedMyParticipationsRoute,
   AuthenticatedPlansRoute: AuthenticatedPlansRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedCheckInIdRoute: AuthenticatedCheckInIdRoute,
@@ -595,6 +700,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardIdQuizRoute: AuthenticatedDashboardIdQuizRoute,
   AuthenticatedDashboardIdAllowlistTsxRoute:
     AuthenticatedDashboardIdAllowlistTsxRoute,
+  AuthenticatedDashboardIdQuizEditorQuizIdRoute:
+    AuthenticatedDashboardIdQuizEditorQuizIdRoute,
+  AuthenticatedDashboardIdQuizSessionsQuizIdRoute:
+    AuthenticatedDashboardIdQuizSessionsQuizIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -623,6 +732,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   FeedbackFormIdRoute: FeedbackFormIdRoute,
   JoinIdRoute: JoinIdRouteWithChildren,
+  QnaEventIdRoute: QnaEventIdRoute,
   QuizJoinCodeRoute: QuizJoinCodeRoute,
   ApiSepayWebhookRoute: ApiSepayWebhookRoute,
 }

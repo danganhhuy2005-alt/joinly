@@ -20,6 +20,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { AppLogo } from "@/components/AppLogo";
 
 import { useAuth } from "@/hooks/use-auth";
+import { getWorkspaceMode, workspaceHome } from "@/lib/workspace-mode";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -67,7 +68,7 @@ function Landing() {
   useEffect(() => {
     if (!loading && user) {
       navigate({
-        to: "/my-events",
+        to: workspaceHome(getWorkspaceMode(user.id)),
         replace: true,
       });
     }

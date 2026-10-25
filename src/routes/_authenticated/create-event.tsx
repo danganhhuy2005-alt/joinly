@@ -10,6 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EventLocationPicker } from "@/components/EventLocationPicker";
+import { EventDiscoveryFields, emptyDiscoveryForm, type DiscoveryFormValue } from "@/components/EventDiscoveryFields";
+import { EventStartModeFields, type StartMode } from "@/components/EventStartModeFields";
+import { saveEventDiscovery } from "@/lib/event-discovery-save";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/create-event")({
@@ -71,6 +74,21 @@ function CreateEvent() {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [checkinRadius, setCheckinRadius] = useState("200");
   const [startsAt, setStartsAt] = useState("");
+  const [startMode, setStartMode] = useState<StartMode>("manual");
+  const [discovery, setDiscovery] = useState<DiscoveryFormValue>({ ...emptyDiscoveryForm });
+  const saveNewEventOptions = async (eventId: string) => {
+    const attempts = await Promise.allSettled([
+      supabase.rpc("configure_event_run_mode" as never, {
+        p_event_id: eventId, p_mode: startMode,
+      } as never).then(({error}) => { if (error) throw error; }),
+      saveEventDiscovery(eventId, discovery),
+    ]);
+    const errors = attempts.filter((x) => x.status === "rejected") as PromiseRejectedResult[];
+    if (errors.length) {
+      toast.warning("Đã tạo sự kiện, nhưng có cài đặt Khám phá/Bắt đầu chưa lưu được. Vào Sửa sự kiện để hoàn tất.");
+      console.error("Save new event options failed", errors.map((x) => x.reason));
+    }
+  };
   const currentYear = new Date().getFullYear();
   const minStartsAt = (() => {
     const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
@@ -358,6 +376,7 @@ function CreateEvent() {
             })),
           },
         });
+        await saveNewEventOptions(result.eventId);
         toast.success("Đã tạo sự kiện bằng gói Monthly!");
         await navigate({
           to: "/manage-event/$id",
@@ -406,6 +425,7 @@ function CreateEvent() {
       toast.error("Không thể tạo phòng. Vui lòng thử lại.");
       return;
     }
+    await saveNewEventOptions(ev.id);
     if (selectedPlan === "free") {
       setLoading(false);
       toast.success("Đã tạo sự kiện miễn phí!");
@@ -590,20 +610,20 @@ function CreateEvent() {
     );
   }
   return (
-    <div className="min-h-screen bg-secondary/30 px-4 py-12">
-      <div className="mx-auto max-w-2xl">
+    <div className="min-h-screen overflow-x-hidden bg-secondary/30 px-3 py-5 sm:px-4 sm:py-12">
+      <div className="mx-auto w-full min-w-0 max-w-2xl">
         <Link
           to="/my-events"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> Quay lại
         </Link>
-        <div className="mt-6 rounded-2xl border border-border bg-card p-8 shadow-sm">
+        <div className="mt-5 min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:mt-6 sm:p-8">
           <h1 className="font-display text-2xl font-bold">Tạo sự kiện mới</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Điền thông tin để khởi tạo phòng QR cho sự kiện.
           </p>
-          <form onSubmit={onSubmit} className="mt-6 space-y-5">
+          <form onSubmit={onSubmit} className="mt-6 min-w-0 space-y-5">
             <div className="space-y-1.5">
               <Label htmlFor="name">Tên sự kiện *</Label>
               <Input
@@ -632,6 +652,7 @@ function CreateEvent() {
               <Input
                 id="when"
                 type="datetime-local"
+                className="block w-full min-w-0 max-w-full"
                 required
                 min={minStartsAt}
                 max={maxStartsAt}
@@ -639,6 +660,7 @@ function CreateEvent() {
                 onChange={(e) => setStartsAt(e.target.value)}
               />
             </div>
+            <EventStartModeFields value={startMode} onChange={setStartMode} />
             {/* ĐỊA ĐIỂM TỔ CHỨC */}
             <div className="space-y-3 rounded-lg border border-border p-4">
               <div>
@@ -696,6 +718,7 @@ function CreateEvent() {
                 placeholder="VD: 120"
               />
             </div>
+            <EventDiscoveryFields value={discovery} onChange={setDiscovery} isDraft={!useMonthly && selectedPlan !== "free"} />
             <div className="space-y-3 rounded-xl border border-border p-4">
               <h3 className="font-semibold">Gói dịch vụ sự kiện</h3>
               {monthlyLoading || scheduledLoading ? (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { useServerFn } from "@tanstack/react-start";
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -7,6 +8,8 @@ import {
   Calendar,
   ClipboardList,
   DoorOpen,
+  EyeOff,
+  Globe2,
   Loader2,
   MapPin,
   Pencil,
@@ -15,8 +18,10 @@ import {
   Trash2,
   Users,
   CreditCard,
+  Gamepad2,
   Crown,
   Copy,
+  MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -33,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { getEventRole, type EventRole } from "@/lib/event-role";
+import { EventRunStatusPanel } from "@/components/EventRunStatusPanel";
 
 export const Route = createFileRoute("/_authenticated/manage-event/$id")({
   head: () => ({
@@ -49,6 +55,7 @@ type EventRow = {
   id: string;
   name: string;
   organizer_id: string;
+  is_demo: boolean;
   location: string | null;
   starts_at: string | null;
   allowlist_enabled: boolean;
@@ -58,6 +65,11 @@ type EventRow = {
   lifecycle_status: "draft" | "active";
   requested_plan_code: string | null;
   expected_attendees: number | null;
+  discovery_enabled: boolean;
+  discovery_category: string;
+  discovery_cover_path: string | null;
+  discovery_show_slots: boolean;
+  run_ended_at: string | null;
 };
 
 type Room = {
@@ -93,7 +105,7 @@ function ManageEvent() {
   const [loading, setLoading] = useState(true);
 
   const [updatingAllowlist, setUpdatingAllowlist] = useState(false);
-
+  const [updatingDiscovery, setUpdatingDiscovery] = useState(false);
   const [deletingEvent, setDeletingEvent] = useState(false);
 
   const createPaymentFn = useServerFn(createPayment);
@@ -144,6 +156,7 @@ function ManageEvent() {
             id,
             name,
             organizer_id,
+            is_demo,
             location,
             starts_at,
             allowlist_enabled,
@@ -152,7 +165,12 @@ function ManageEvent() {
             attendee_limit,
             lifecycle_status,
             requested_plan_code,
-            expected_attendees
+            expected_attendees,
+            discovery_enabled,
+            discovery_category,
+            discovery_cover_path,
+            discovery_show_slots,
+            run_ended_at
           `,
         )
         .eq("id", id)
@@ -424,39 +442,60 @@ function ManageEvent() {
   };
 
   const deleteEvent = async () => {
-    if (!event) return;
+    if (!event || deletingEvent) return;
 
     if (role !== "owner") {
       toast.error("Chỉ Owner mới có thể xóa sự kiện.");
-
       return;
     }
 
-    const confirmed = window.confirm(
-      `Bạn có chắc muốn xóa sự kiện "${event.name}"?\n\nHành động này không thể hoàn tác.`,
-    );
-
-    if (!confirmed) return;
-
+    // Bộ Quiz chưa có trong types.ts của Supabase; dùng client không ràng buộc
+    // schema chỉ cho bước đọc số lượng, không cấp thêm quyền dữ liệu.
     setDeletingEvent(true);
 
-    const { error } = await supabase.from("events").delete().eq("id", id);
+    try {
+      const { count, error: quizError } = await (
+        supabase as unknown as SupabaseClient
+      )
+        .from("quizzes")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", id);
 
-    setDeletingEvent(false);
+      if (quizError) {
+        throw new Error(`Không thể kiểm tra bộ Quiz: ${quizError.message}`);
+      }
 
-    if (error) {
-      console.error(error);
+      const quizCount = count ?? 0;
+      const confirmationMessage = quizCount > 0
+        ? `Sự kiện "${event.name}" đang có ${quizCount} bộ Quiz.\n\nBạn có chắc chắn muốn xóa sự kiện này không?\n\nKhi xóa, toàn bộ bộ câu hỏi, phiên chơi, câu trả lời và điểm Quiz thuộc sự kiện này cũng bị xóa vĩnh viễn. Hành động này không thể hoàn tác.`
+        : `Bạn có chắc muốn xóa sự kiện "${event.name}"?\n\nHành động này không thể hoàn tác.`;
 
-      toast.error("Không thể xóa sự kiện.");
+      if (!window.confirm(confirmationMessage)) return;
 
-      return;
+      // Migration 20261025060000 dọn quiz_answers trước khi ON DELETE CASCADE
+      // xóa quizzes/quiz_questions, để không vướng khóa ngoại câu trả lời.
+      const { data: deleted, error } = await supabase
+        .from("events")
+        .delete()
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!deleted) {
+        throw new Error("Sự kiện không được xóa. Kiểm tra lại quyền Owner.");
+      }
+
+      toast.success("Đã xóa sự kiện và dữ liệu Quiz liên quan.");
+      await navigate({ to: "/my-events" });
+    } catch (error) {
+      console.error("Xóa sự kiện thất bại:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Không thể xóa sự kiện.",
+      );
+    } finally {
+      setDeletingEvent(false);
     }
-
-    toast.success("Đã xóa sự kiện.");
-
-    navigate({
-      to: "/my-events",
-    });
   };
 
   const resumeDraftPayment = async () => {
@@ -523,6 +562,48 @@ function ManageEvent() {
     }
   };
 
+  // Quick publishing controls use the same owner-only Supabase RPC as Create/Edit.
+  // Never update events directly: RLS and backend eligibility rules stay authoritative.
+  const discoveryBlockReason = !event
+    ? null
+    : event.lifecycle_status !== "active"
+      ? "Sự kiện chưa kích hoạt nên chưa thể công khai."
+      : event.is_demo
+        ? "Sự kiện demo không thể công khai."
+        : event.allowlist_enabled
+          ? "Hãy tắt Allow-list trước khi công khai."
+          : event.run_ended_at
+            ? "Sự kiện đã kết thúc không thể công khai."
+            : null;
+
+  const toggleDiscovery = async (enabled: boolean) => {
+    if (!event || role !== "owner" || updatingDiscovery) return;
+    if (enabled && discoveryBlockReason) {
+      toast.error(discoveryBlockReason);
+      return;
+    }
+
+    setUpdatingDiscovery(true);
+    try {
+      const { error } = await supabase.rpc("save_event_discovery_config" as never, {
+        p_event_id: event.id,
+        p_category: event.discovery_category || "other",
+        p_cover_path: event.discovery_cover_path,
+        p_show_slots: event.discovery_show_slots ?? false,
+        p_enabled: enabled,
+      } as never);
+      if (error) throw error;
+
+      setEvent((previous) => previous ? { ...previous, discovery_enabled: enabled } : previous);
+      toast.success(enabled ? "Sự kiện đã bật hiển thị trên Khám phá." : "Sự kiện đã ẩn khỏi Khám phá.");
+    } catch (error) {
+      console.error("Không thể thay đổi hiển thị Khám phá:", error);
+      toast.error(error instanceof Error ? error.message : "Không thể thay đổi trạng thái Khám phá.");
+    } finally {
+      setUpdatingDiscovery(false);
+    }
+  };
+
   const visibleAllowlist = allowlist.filter((person) => {
     // Toàn sự kiện:
     // hiển thị tất cả người, kể cả người thuộc từng phòng
@@ -566,7 +647,7 @@ function ManageEvent() {
   }
   if (event.lifecycle_status === "draft") {
     return (
-      <div className="min-h-screen bg-secondary/30 px-4 py-12">
+      <div className="min-h-screen overflow-x-hidden bg-secondary/30 px-3 py-5 sm:px-4 sm:py-12">
         <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 text-center">
             <h1 className="text-2xl font-bold">Sự kiện chưa được kích hoạt</h1>
@@ -636,7 +717,7 @@ function ManageEvent() {
 
   return (
     <div className="min-h-screen bg-secondary/30 px-4 py-12">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto w-full min-w-0 max-w-5xl">
         <Link
           to="/my-events"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -647,12 +728,39 @@ function ManageEvent() {
 
         {/* THÔNG TIN SỰ KIỆN */}
         <div className="mt-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-3xl font-bold">{event.name}</h1>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <h1 className="min-w-0 break-words font-display text-2xl font-bold sm:text-3xl">{event.name}</h1>
+              <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium">
+                {roleLabel}
+              </span>
+            </div>
 
-            <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium">
-              {roleLabel}
-            </span>
+            {role === "owner" && (
+              <div className="flex max-w-full flex-col gap-1">
+                <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-sm">
+                  {event.discovery_enabled ? (
+                    <Globe2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                  ) : (
+                    <EyeOff className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  )}
+                  <label htmlFor="event-discovery-quick-toggle" className="cursor-pointer text-sm font-medium">
+                    {event.discovery_enabled ? "Đang công khai" : "Đang ẩn"}
+                  </label>
+                  {updatingDiscovery && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                  <Switch
+                    id="event-discovery-quick-toggle"
+                    aria-label="Công khai sự kiện trên Khám phá"
+                    checked={Boolean(event.discovery_enabled)}
+                    disabled={updatingDiscovery || (!event.discovery_enabled && Boolean(discoveryBlockReason))}
+                    onCheckedChange={toggleDiscovery}
+                  />
+                </div>
+                {!event.discovery_enabled && discoveryBlockReason && (
+                  <p className="max-w-64 text-xs text-muted-foreground" role="status">{discoveryBlockReason}</p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
@@ -707,14 +815,29 @@ function ManageEvent() {
         </div>
 
         {/* NÚT QUẢN LÝ */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           {/* BÊN TRÁI */}
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" asChild>
+          <div className="grid w-full grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap">
+            <Button className="min-w-0 text-xs sm:text-sm" variant="outline" asChild>
               <Link to="/dashboard/$id" params={{ id }}>
                 <BarChart3 className="h-4 w-4" />
                 Dashboard
               </Link>
+            </Button>
+
+            {/* Quiz Studio thuộc nhóm công cụ Quản lý sự kiện. */}
+            <Button className="min-w-0 text-xs sm:text-sm" variant="outline" asChild>
+              <Link to="/dashboard/$id/quiz" params={{ id }}>
+                <Gamepad2 className="h-4 w-4" />
+                Quản lý Quiz
+              </Link>
+            </Button>
+
+            <Button variant="outline" asChild>
+              <a href={`/qna/${id}`}>
+                <MessageCircle className="h-4 w-4" />
+                Live Q&A / Giơ tay
+              </a>
             </Button>
 
             <Button variant="outline" asChild>
@@ -739,7 +862,7 @@ function ManageEvent() {
           </div>
 
           {/* BÊN PHẢI */}
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap">
             {(role === "owner" || role === "co_owner") && (
               <Button variant="outline" asChild>
                 <Link to="/edit-event/$id" params={{ id }}>
@@ -771,8 +894,10 @@ function ManageEvent() {
           </div>
         </div>
 
+        <div className="mt-8"><EventRunStatusPanel eventId={id} role={role} /></div>
+
         {/* ALLOW-LIST */}
-        <div className="mt-8 rounded-2xl border border-border bg-card p-6">
+        <div className="mt-8 min-w-0 rounded-2xl border border-border bg-card p-3 sm:p-6">
           <div className="flex flex-col gap-5">
             {/* TITLE */}
             <div className="flex flex-wrap items-start justify-between gap-4">

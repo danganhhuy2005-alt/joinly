@@ -15,6 +15,10 @@ import {
   Download,
 } from "lucide-react";
 import { getParticipantConfirmation } from "@/lib/confirmation.functions";
+import { setJoined } from "@/lib/joined-events";
+import { MessageCircle } from "lucide-react";
+import { GuestEventHeader } from "@/components/GuestEventHeader";
+import { SaveGuestTicketPrompt } from "@/components/SaveGuestTicketPrompt";
 
 export const Route = createFileRoute("/join/$id/confirm/$token")({
   head: () => ({
@@ -48,6 +52,14 @@ function ConfirmationPage() {
     })();
   }, [id, token, fetchConfirmation]);
 
+  useEffect(() => {
+    // On a different browser/device, save the verified ticket after opening
+    // its confirmation link. Q&A never needs a token in its URL.
+    if (data && data.event_id === id) {
+      setJoined(id, { roomId: data.room_id, roomName: data.room_name, token });
+    }
+  }, [data, id, token]);
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -64,6 +76,7 @@ function ConfirmationPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             Liên kết xác nhận không hợp lệ hoặc đã thay đổi.
           </p>
+          <a href="/" className="mt-4 inline-flex text-sm font-medium text-primary hover:underline">Về Trang chủ Joinly</a>
         </div>
       </div>
     );
@@ -107,12 +120,7 @@ function ConfirmationPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-secondary/40 px-4 py-12">
       <div className="w-full max-w-md md:max-w-3xl">
-        <div className="mb-6 flex items-center justify-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4" strokeWidth={2.5} />
-          </span>
-          <span className="font-display text-xl font-bold">Joinly</span>
-        </div>
+        <GuestEventHeader />
         <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Check className="h-6 w-6" />
@@ -238,6 +246,16 @@ function ConfirmationPage() {
             <Download className="h-4 w-4" />
             Tải vé PDF
           </button>
+
+          <a
+            href={`/qna/${id}`}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-3 text-sm font-semibold transition-colors hover:bg-secondary"
+          >
+            <MessageCircle className="h-4 w-4" />
+            Giơ tay / Đặt câu hỏi cho BTC
+          </a>
+
+          <SaveGuestTicketPrompt />
 
           <div className="mt-6 rounded-xl border border-primary/20 bg-primary-soft p-4">
             <div className="flex items-start gap-3">

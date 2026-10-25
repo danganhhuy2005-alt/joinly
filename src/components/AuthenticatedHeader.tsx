@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
-import { ChevronDown, LogOut, User, Crown } from "lucide-react";
+import { Check, LogOut, User, Crown, CalendarCog, Ticket, Compass } from "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
 
 import { toast } from "sonner";
@@ -19,12 +19,16 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 
 import { clearAuthSessionStartedAt } from "@/lib/auth-session";
+import { getWorkspaceMode, setWorkspaceMode, workspaceHome, type WorkspaceMode } from "@/lib/workspace-mode";
 
 export function AuthenticatedHeader() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [displayName, setDisplayName] = useState("Tài khoản");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [workspace, setWorkspace] = useState<WorkspaceMode>("organizer");
 
   useEffect(() => {
     let cancelled = false;
@@ -38,13 +42,14 @@ export function AuthenticatedHeader() {
         return;
       }
 
+      setAccountId(user.id);
+      setWorkspace(getWorkspaceMode(user.id));
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("full_name, club_name, avatar_url")
         .eq("id", user.id)
         .maybeSingle();
-
-      console.log("HEADER PROFILE:", profile);
 
       if (cancelled) {
         return;
@@ -66,6 +71,16 @@ export function AuthenticatedHeader() {
       cancelled = true;
     };
   }, []);
+
+  // Direct links to either homepage must keep the avatar menu in sync.
+  useEffect(() => {
+    if (!accountId) return;
+    if (location.pathname === "/my-events" || location.pathname === "/my-participations") {
+      const routeMode = location.pathname === "/my-participations" ? "participant" : "organizer";
+      setWorkspace(routeMode);
+      setWorkspaceMode(accountId, routeMode);
+    }
+  }, [accountId, location.pathname]);
 
   useEffect(() => {
     const handleProfileUpdated = (event: Event) => {
@@ -89,6 +104,12 @@ export function AuthenticatedHeader() {
       window.removeEventListener("joinly-profile-updated", handleProfileUpdated);
     };
   }, []);
+  const switchWorkspace = (next: WorkspaceMode) => {
+    if (accountId) setWorkspaceMode(accountId, next);
+    setWorkspace(next);
+    void navigate({ to: workspaceHome(next) });
+  };
+
   const onLogout = async () => {
     clearAuthSessionStartedAt();
 
@@ -103,18 +124,25 @@ export function AuthenticatedHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link to="/my-events" className="flex items-center">
-          <AppLogo />
+      <div className="mx-auto flex h-16 max-w-6xl min-w-0 items-center justify-between gap-2 px-3 sm:px-6">
+        <Link to={workspaceHome(workspace)} className="flex min-w-0 shrink items-center">
+          <AppLogo imageClassName="h-8 max-w-[105px] sm:h-10 sm:max-w-none" />
         </Link>
 
-        <div className="flex items-center gap-3">
-          <Button asChild size="sm" variant="outline">
-            <Link to="/plans">
-              <Crown className="h-4 w-4" />
-              Gói
-            </Link>
-          </Button>
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+          {workspace === "participant" && (
+            <Button asChild size="sm" variant="outline" className="px-2 sm:px-3">
+              <Link to="/discover" aria-label="Khám phá"><Compass className="h-4 w-4" /> <span className="hidden min-[390px]:inline">Khám phá</span></Link>
+            </Button>
+          )}
+          {workspace === "organizer" && (
+            <Button asChild size="sm" variant="outline" className="px-2 sm:px-3">
+              <Link to="/plans" aria-label="Gói dịch vụ">
+                <Crown className="h-4 w-4" />
+                <span className="hidden min-[390px]:inline">Gói</span>
+              </Link>
+            </Button>
+          )}
           <ThemeToggle />
 
           <DropdownMenu>
@@ -128,10 +156,10 @@ export function AuthenticatedHeader() {
                   <img
                     src={avatarUrl}
                     alt={displayName}
-                    className="h-10 w-10 rounded-full object-cover"
+                    className="h-9 w-9 rounded-full object-cover sm:h-10 sm:w-10"
                   />
                 ) : (
-                  <span className="grid h-10 w-10 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-primary sm:h-10 sm:w-10 text-sm font-semibold text-primary-foreground">
                     {displayName.charAt(0).toUpperCase()}
                   </span>
                 )}
@@ -156,6 +184,28 @@ export function AuthenticatedHeader() {
                   <p className="truncate text-sm font-semibold">{displayName}</p>
                 </div>
               </div>
+
+              <DropdownMenuSeparator />
+
+              <div className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Chuyển không gian
+              </div>
+              <DropdownMenuItem
+                className="cursor-pointer rounded-xl px-3 py-3"
+                onSelect={() => switchWorkspace("organizer")}
+              >
+                <CalendarCog className="mr-2 h-4 w-4" />
+                <span className="flex-1">Người tổ chức</span>
+                {workspace === "organizer" && <Check className="h-4 w-4 text-primary" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer rounded-xl px-3 py-3"
+                onSelect={() => switchWorkspace("participant")}
+              >
+                <Ticket className="mr-2 h-4 w-4" />
+                <span className="flex-1">Người tham gia</span>
+                {workspace === "participant" && <Check className="h-4 w-4 text-primary" />}
+              </DropdownMenuItem>
 
               <DropdownMenuSeparator />
 

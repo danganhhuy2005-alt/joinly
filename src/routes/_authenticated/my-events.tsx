@@ -9,7 +9,6 @@ import {
   QrCode,
   Sparkles,
   Loader2,
-  Gamepad2,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -165,7 +164,7 @@ function MyEvents() {
 
   return (
     <div className="min-h-screen bg-secondary/30">
-      <main className="mx-auto max-w-6xl px-6 py-10">
+      <main className="mx-auto w-full min-w-0 max-w-6xl px-3 py-6 sm:px-6 sm:py-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="font-display text-3xl font-bold tracking-tight">Sự kiện của tôi</h1>
@@ -494,19 +493,13 @@ function EventCard({ event }: { event: EventWithRole }) {
 
       {/* NÚT QUẢN LÝ RIÊNG */}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-3">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-3">
         <Button variant="outline" size="sm" asChild>
           <Link to="/manage-event/$id" params={{ id: event.id }}>
             Quản lý sự kiện
           </Link>
         </Button>
 
-        <Button size="sm" asChild>
-          <Link to="/dashboard/$id/quiz" params={{ id: event.id }}>
-            <Gamepad2 className="mr-2 h-4 w-4" />
-            Quản lý Quiz
-          </Link>
-        </Button>
       </div>
     </div>
   );

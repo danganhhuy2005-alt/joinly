@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <title>Joinly Future Lab — Bản thử nghiệm ý tưởng</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="brandmark">J<span>✦</span></div><div><b>joinly<span class="branddot">.</span></b><small>FUTURE LAB</small></div></div>
+    <div class="side-group-label">KHÔNG GIAN THỬ NGHIỆM</div>
+    <nav class="side-nav" aria-label="Điều hướng bản thử nghiệm">
+      <button class="nav-item active" data-view="overview"><span class="nav-ico">▦</span>Tổng quan<span class="nav-kbd">01</span></button>
+      <button class="nav-item" data-view="live"><span class="nav-ico">✋</span>Live Q&A<span class="nav-dot"></span></button>
+      <button class="nav-item" data-view="progress"><span class="nav-ico">◷</span>Tiến độ sự kiện</button>
+      <button class="nav-item" data-view="discover"><span class="nav-ico">⌕</span>Khám phá sự kiện</button>
+      <button class="nav-item" data-view="speakers"><span class="nav-ico">◈</span>Diễn giả & lịch trình</button>
+      <button class="nav-item" data-view="partners"><span class="nav-ico">♙</span>Đơn vị tổ chức</button>
+      <button class="nav-item" data-view="pricing"><span class="nav-ico">▥</span>Chi phí & gói</button>
+      <button class="nav-item" data-view="notifications"><span class="nav-ico">♧</span>Thông báo & tài trợ</button>
+      <button class="nav-item" data-view="roadmap"><span class="nav-ico">➜</span>Lộ trình phát triển</button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="sandbox-box"><div class="sandbox-badge"><span class="pulse"></span> CHẾ ĐỘ MÔ PHỎNG</div><p>Không kết nối Supabase, SePay, GA4 hay gửi thông báo thật.</p></div>
+      <div class="nav-footer">Dựa trên Joinly source 21/10/2026<br>Không dùng cho production</div>
+    </div>
+  </aside>
+  <div class="mobile-shade" id="mobile-shade"></div>
+  <main class="workspace">
+    <header class="topbar"><div class="crumb"><button class="menu-button" id="menu-button" aria-label="Mở menu">☰</button><span class="crumb-home">Joinly</span><span class="crumb-divider">/</span><span id="breadcrumb">Tổng quan</span></div><div class="top-actions"><span class="mode-pill"><span class="pulse"></span> LIVE PREVIEW</span><button class="ghost-btn" data-action="reset-demo" title="Khôi phục dữ liệu mô phỏng">↺ <span>Đặt lại</span></button><button class="avatar" title="Tài khoản mô phỏng">JD</button></div></header>
+    <div id="view" class="page-view" aria-live="polite"></div>
+    <footer class="bottom-note">Joinly Future Lab <span>•</span> Dữ liệu, doanh thu, số lượt tham gia và tổ chức đều là ví dụ minh họa. Không thay đổi dữ liệu website thực.</footer>
+  </main>
+</div>
+<div id="toast" class="toast" role="status"></div>
+<div id="modal-root"></div>
+<script src="app.js" defer></script>
+</body>
+</html>

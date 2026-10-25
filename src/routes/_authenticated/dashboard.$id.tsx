@@ -38,6 +38,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 
 import { getEventRole, type EventRole } from "@/lib/event-role";
+import { EventRunStatusPanel } from "@/components/EventRunStatusPanel";
 
 export const Route = createFileRoute("/_authenticated/dashboard/$id")({
   head: () => ({
@@ -643,6 +644,8 @@ function Dashboard() {
             </Button>
           )}
         </div>
+
+        <div className="mt-6"><EventRunStatusPanel eventId={id} role={role} readonly /></div>
 
         {/* NGƯỜI DEMO - Owner, áp dụng mọi gói, vẫn chịu giới hạn người tham gia */}
         {/* NGƯỜI DEMO */}

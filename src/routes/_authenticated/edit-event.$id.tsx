@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EventLocationPicker } from "@/components/EventLocationPicker";
+import { EventDiscoveryFields, emptyDiscoveryForm, type DiscoveryFormValue } from "@/components/EventDiscoveryFields";
+import { EventStartModeFields, type StartMode } from "@/components/EventStartModeFields";
+import { saveEventDiscovery } from "@/lib/event-discovery-save";
 
 import { supabase } from "@/integrations/supabase/client";
 import { getEventRole, type EventRole } from "@/lib/event-role";
@@ -36,6 +39,18 @@ type EventRow = {
   checkin_radius: number;
 };
 
+type SavedDiscoveryState = Pick<DiscoveryFormValue, "category" | "coverPath" | "showSlots" | "enabled">;
+
+function getSaveErrorText(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (!error || typeof error !== "object") return "Lỗi không xác định.";
+  const payload = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+  const message = typeof payload.message === "string" ? payload.message : "Lỗi không xác định.";
+  const code = typeof payload.code === "string" && payload.code ? ` (mã ${payload.code})` : "";
+  const hint = typeof payload.hint === "string" && payload.hint ? ` — ${payload.hint}` : "";
+  return `${message}${code}${hint}`;
+}
+
 function toDateTimeLocal(value: string | null) {
   if (!value) return "";
 
@@ -56,8 +71,15 @@ function EditEvent() {
   const [role, setRole] = useState<EventRole>(null);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [discoveryReady, setDiscoveryReady] = useState(true);
+  const [runReady, setRunReady] = useState(true);
+  const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
 
   const [saving, setSaving] = useState(false);
+  const [configSaveErrors, setConfigSaveErrors] = useState<string[]>([]);
+  const originalStartMode = useRef<StartMode>("manual");
+  const originalDiscovery = useRef<SavedDiscoveryState | null>(null);
 
   const [name, setName] = useState("");
 
@@ -66,6 +88,10 @@ function EditEvent() {
   const [location, setLocation] = useState("");
 
   const [startsAt, setStartsAt] = useState("");
+  const startsAtOriginal = useRef<string | null>(null);
+  const [startMode, setStartMode] = useState<StartMode>("manual");
+  const [eventRunStatus, setEventRunStatus] = useState<"upcoming" | "live" | "ended">("upcoming");
+  const [discovery, setDiscovery] = useState<DiscoveryFormValue>({ ...emptyDiscoveryForm });
 
   const [expected, setExpected] = useState("");
 
@@ -76,68 +102,114 @@ function EditEvent() {
   const [checkinRadius, setCheckinRadius] = useState("200");
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       setLoading(true);
+      setLoadError(null);
+      setLoadWarnings([]);
+      setConfigSaveErrors([]);
+      originalDiscovery.current = null;
+      setDiscoveryReady(true);
+      setRunReady(true);
 
-      // Kiểm tra quyền trước
+      // Luôn tải thông tin cốt lõi trước. Các cột Khám phá là tính năng bổ sung,
+      // không được làm form sửa sự kiện cũ thất bại.
       const currentRole = await getEventRole(id);
-
+      if (cancelled) return;
       setRole(currentRole);
-
       if (currentRole !== "owner" && currentRole !== "co_owner") {
         setLoading(false);
         return;
       }
 
-      // Chỉ Owner / Co-owner mới tải dữ liệu edit
       const { data: event, error } = await supabase
         .from("events")
-        .select(
-          `
-            id,
-            name,
-            description,
-            location,
-            starts_at,
-            expected_attendees,
-            latitude,
-            longitude,
-            checkin_radius
-          `,
-        )
+        .select(`
+          id, name, description, location, starts_at, expected_attendees,
+          latitude, longitude, checkin_radius
+        `)
         .eq("id", id)
         .maybeSingle();
+      if (cancelled) return;
 
       if (error || !event) {
-        console.error("Load event error:", error);
-
+        console.error("Load event basic fields error:", error);
+        setLoadError(error
+          ? `${error.message} (mã: ${error.code ?? "không xác định"})`
+          : "Không tìm thấy sự kiện, hoặc tài khoản hiện tại không có quyền đọc sự kiện này.");
         toast.error("Không thể tải thông tin sự kiện.");
-
         setLoading(false);
         return;
       }
 
-      const ev = event as EventRow;
-
+      const ev = event as unknown as EventRow;
       setName(ev.name);
-
       setDescription(ev.description ?? "");
-
       setLocation(ev.location ?? "");
-
       setStartsAt(toDateTimeLocal(ev.starts_at));
-
+      startsAtOriginal.current = ev.starts_at;
       setExpected(ev.expected_attendees ? String(ev.expected_attendees) : "");
-
       setLatitude(ev.latitude);
       setLongitude(ev.longitude);
-
       setCheckinRadius(String(ev.checkin_radius ?? 200));
 
+      // Tải cấu hình Khám phá tách riêng để cột SQL chưa được cập nhật
+      // cũng không chặn người dùng sửa tên, mô tả, địa điểm của sự kiện cũ.
+      const { data: discoveryData, error: discoveryError } = await supabase
+        .from("events")
+        .select("discovery_enabled, discovery_category, discovery_cover_path, discovery_show_slots")
+        .eq("id", id)
+        .maybeSingle();
+      if (cancelled) return;
+      const warnings: string[] = [];
+      if (discoveryError || !discoveryData) {
+        console.error("Load event discovery fields error:", discoveryError);
+        setDiscoveryReady(false);
+        warnings.push("Không tải được cấu hình Khám phá. Kiểm tra migration 20261025030000; phần thông tin cơ bản vẫn sửa được.");
+      } else {
+        const details = discoveryData as unknown as {
+          discovery_enabled: boolean | null;
+          discovery_category: string | null;
+          discovery_cover_path: string | null;
+          discovery_show_slots: boolean | null;
+        };
+        const savedDiscovery: SavedDiscoveryState = {
+          category: details.discovery_category || "other",
+          coverPath: details.discovery_cover_path ?? null,
+          showSlots: Boolean(details.discovery_show_slots),
+          enabled: Boolean(details.discovery_enabled),
+        };
+        originalDiscovery.current = savedDiscovery;
+        setDiscovery({ ...savedDiscovery, coverFile: null, removeCover: false });
+      }
+
+      // Trạng thái vận hành cũng là chức năng mới, không làm mất quyền sửa
+      // thông tin cũ nếu RPC chưa có. Không cho đổi lịch khi không xác minh
+      // được trạng thái sự kiện để tránh làm sai thời gian sự kiện đã diễn ra.
+      const { data: stateRows, error: stateError } = await supabase.rpc(
+        "get_event_run_state" as never, { p_event_id: id } as never,
+      );
+      if (cancelled) return;
+      if (stateError) {
+        console.error("Load event run state error:", stateError);
+        setRunReady(false);
+        warnings.push("Không tải được trạng thái Bắt đầu/Kết thúc. Hãy kiểm tra migration 20261025040000; tạm khóa thay đổi thời gian.");
+      } else {
+        const state = (stateRows as { status: "upcoming" | "live" | "ended"; mode: StartMode }[] | null)?.[0];
+        if (state) {
+          setStartMode(state.mode);
+          originalStartMode.current = state.mode;
+          setEventRunStatus(state.status);
+        } else {
+          setRunReady(false);
+          warnings.push("Không nhận được trạng thái vận hành của sự kiện; tạm khóa thay đổi thời gian.");
+        }
+      }
+      setLoadWarnings(warnings);
       setLoading(false);
     };
-
-    load();
+    void load();
+    return () => { cancelled = true; };
   }, [id]);
 
   const saveEvent = async (e: React.FormEvent) => {
@@ -153,8 +225,18 @@ function EditEvent() {
       return;
     }
 
+    if ((!runReady || eventRunStatus !== "upcoming") && toDateTimeLocal(startsAtOriginal.current) !== startsAt) {
+      toast.error("Không thể đổi thời gian khi sự kiện đã bắt đầu.");
+      return;
+    }
     if (!startsAt) {
       toast.error("Vui lòng chọn ngày và giờ.");
+      return;
+    }
+
+    if (runReady && eventRunStatus === "upcoming" && startMode === "automatic" &&
+        new Date(startsAt).getTime() <= Date.now()) {
+      toast.error("Chế độ tự động yêu cầu thời gian bắt đầu ở tương lai.");
       return;
     }
 
@@ -178,6 +260,7 @@ function EditEvent() {
     }
 
     setSaving(true);
+    setConfigSaveErrors([]);
 
     const { error } = await supabase
       .from("events")
@@ -199,9 +282,8 @@ function EditEvent() {
       })
       .eq("id", id);
 
-    setSaving(false);
-
     if (error) {
+      setSaving(false);
       console.error("Update event error:", error);
 
       toast.error("Không thể cập nhật sự kiện.");
@@ -209,10 +291,61 @@ function EditEvent() {
       return;
     }
 
-    toast.success("Đã cập nhật sự kiện.");
+    // Không gọi RPC cấu hình khi người dùng chỉ sửa tên/mô tả/địa điểm.
+    // Cấu hình bắt đầu và Khám phá được lưu riêng, với lỗi thực tế riêng.
+    const failedParts: string[] = [];
+
+    if (runReady && eventRunStatus === "upcoming" && startMode !== originalStartMode.current) {
+      try {
+        const { error: runError } = await supabase.rpc("configure_event_run_mode" as never,
+          { p_event_id: id, p_mode: startMode } as never);
+        if (runError) throw runError;
+        originalStartMode.current = startMode;
+      } catch (runError) {
+        console.error("Save event start mode error:", runError);
+        failedParts.push(`Chế độ bắt đầu: ${getSaveErrorText(runError)}`);
+      }
+    }
+
+    if (role === "owner" && discoveryReady) {
+      const saved = originalDiscovery.current;
+      const discoveryChanged = discovery.coverFile !== null || discovery.removeCover || !saved ||
+        discovery.category !== saved.category ||
+        discovery.coverPath !== saved.coverPath ||
+        discovery.showSlots !== saved.showSlots ||
+        discovery.enabled !== saved.enabled;
+      if (discoveryChanged) {
+        try {
+          const newCoverPath = await saveEventDiscovery(id, discovery);
+          const savedNext: SavedDiscoveryState = {
+            category: discovery.category,
+            coverPath: newCoverPath,
+            showSlots: discovery.showSlots,
+            enabled: discovery.enabled,
+          };
+          originalDiscovery.current = savedNext;
+          setDiscovery({ ...savedNext, coverFile: null, removeCover: false });
+        } catch (discoveryError) {
+          console.error("Save event discovery error:", discoveryError);
+          failedParts.push(`Khám phá: ${getSaveErrorText(discoveryError)}`);
+        }
+      }
+    }
+
+    setSaving(false);
+    if (failedParts.length > 0) {
+      setConfigSaveErrors(failedParts);
+      toast.error("Thông tin cơ bản đã lưu. Có cấu hình chưa lưu; xem lỗi ngay trong form.");
+      return;
+    }
+    if (!runReady || (role === "owner" && !discoveryReady)) {
+      toast.warning("Đã lưu thông tin cơ bản; cấu hình Khám phá/Bắt đầu tạm thời không khả dụng.");
+    } else {
+      toast.success("Đã cập nhật sự kiện.");
+    }
 
     navigate({
-      to: "/dashboard/$id",
+      to: "/manage-event/$id",
       params: { id },
     });
   };
@@ -221,6 +354,19 @@ function EditEvent() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadError && (role === "owner" || role === "co_owner")) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-12">
+        <div className="rounded-xl border border-destructive/30 bg-card p-5 space-y-3">
+          <h1 className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-5 w-5 text-destructive" /> Không thể tải sự kiện</h1>
+          <p className="text-sm text-muted-foreground">{loadError}</p>
+          <p className="text-xs text-muted-foreground">Nếu lỗi còn xảy ra, hãy gửi lại nội dung lỗi ở đây để kiểm tra RLS hoặc schema Supabase.</p>
+          <Button type="button" onClick={() => window.location.reload()}>Tải lại trang</Button>
+        </div>
       </div>
     );
   }
@@ -244,8 +390,8 @@ function EditEvent() {
   }
 
   return (
-    <div className="min-h-screen bg-secondary/30 px-4 py-12">
-      <div className="mx-auto max-w-2xl">
+    <div className="min-h-screen overflow-x-hidden bg-secondary/30 px-3 py-5 sm:px-4 sm:py-12">
+      <div className="mx-auto w-full min-w-0 max-w-2xl">
         <Link
           to="/manage-event/$id"
           params={{ id }}
@@ -255,12 +401,24 @@ function EditEvent() {
           Quay lại sự kiện
         </Link>
 
-        <div className="mt-6 rounded-2xl border border-border bg-card p-8 shadow-sm">
+        <div className="mt-5 min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:mt-6 sm:p-8">
           <h1 className="font-display text-2xl font-bold">Sửa sự kiện</h1>
 
           <p className="mt-1 text-sm text-muted-foreground">Cập nhật thông tin của sự kiện.</p>
 
-          <form onSubmit={saveEvent} className="mt-6 space-y-5">
+          {loadWarnings.length > 0 && (
+            <div className="mt-5 space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              {loadWarnings.map((message) => <p key={message} className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{message}</p>)}
+            </div>
+          )}
+          {configSaveErrors.length > 0 && (
+            <div role="alert" className="mt-5 space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              <p className="font-semibold">Thông tin cơ bản đã được lưu, nhưng cấu hình sau chưa thành công:</p>
+              {configSaveErrors.map((message, index) => <p key={index} className="break-words">• {message}</p>)}
+              <p className="text-xs text-muted-foreground">Bạn có thể sửa phần bị lỗi rồi bấm Lưu lại; không cần nhập lại tên hay mô tả.</p>
+            </div>
+          )}
+          <form onSubmit={saveEvent} className="mt-6 min-w-0 space-y-5">
             <div className="space-y-1.5">
               <Label htmlFor="name">Tên sự kiện *</Label>
 
@@ -290,11 +448,16 @@ function EditEvent() {
               <Input
                 id="startsAt"
                 type="datetime-local"
+                className="block w-full min-w-0 max-w-full"
                 value={startsAt}
+                disabled={!runReady || eventRunStatus !== "upcoming"}
                 onChange={(e) => setStartsAt(e.target.value)}
               />
             </div>
 
+            {runReady && eventRunStatus === "upcoming" ? <EventStartModeFields value={startMode} onChange={setStartMode} /> : (
+              <p className="rounded-lg bg-secondary p-3 text-sm text-muted-foreground">Trạng thái sự kiện không cho phép sửa thời gian hoặc chế độ bắt đầu.</p>
+            )}
             <div className="space-y-3 rounded-lg border p-4">
               <div>
                 <Label>Địa điểm tổ chức</Label>
@@ -351,6 +514,8 @@ function EditEvent() {
               />
             </div>
 
+            {role === "owner" && discoveryReady ? <EventDiscoveryFields value={discovery} onChange={setDiscovery} disabled={saving} /> :
+              <p className="text-xs text-muted-foreground">{role !== "owner" ? "Chỉ Owner được chỉnh thông tin Khám phá." : "Cấu hình Khám phá tạm thời không khả dụng; vẫn có thể lưu thông tin cơ bản."}</p>}
             <Button type="submit" size="lg" className="w-full" disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Lưu thay đổi

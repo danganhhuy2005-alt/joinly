@@ -1,0 +1,3468 @@
+rpc_name,status,arguments,security_definer,anon_execute,authenticated_execute,service_execute,version_hash,sql_definition
+approve_coowner_request,EXISTS,"_event_id uuid, _member_id uuid",true,false,true,true,cfdce2a459b6858ece8537bf43647d64,"CREATE OR REPLACE FUNCTION public.approve_coowner_request(_event_id uuid, _member_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  current_user_id uuid;
+  owner_id uuid;
+  target_member public.event_members%ROWTYPE;
+BEGIN
+  current_user_id := auth.uid();
+
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'Bạn chưa đăng nhập.';
+  END IF;
+
+  SELECT organizer_id
+  INTO owner_id
+  FROM public.events
+  WHERE id = _event_id;
+
+  IF owner_id IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy sự kiện.';
+  END IF;
+
+  -- Chỉ Owner thật sự mới được duyệt
+  IF current_user_id <> owner_id THEN
+    RAISE EXCEPTION 'Chỉ Owner mới được duyệt Co-owner.';
+  END IF;
+
+  SELECT *
+  INTO target_member
+  FROM public.event_members
+  WHERE id = _member_id
+    AND event_id = _event_id
+  LIMIT 1;
+
+  IF target_member.id IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy lời mời.';
+  END IF;
+
+  IF target_member.role <> 'co_owner' THEN
+    RAISE EXCEPTION 'Thành viên này không phải Co-owner.';
+  END IF;
+
+  IF target_member.status <> 'pending' THEN
+    RAISE EXCEPTION 'Lời mời này không ở trạng thái chờ duyệt.';
+  END IF;
+
+  UPDATE public.event_members
+  SET
+    status = 'active',
+    updated_at = now()
+  WHERE id = _member_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'status', 'active'
+  );
+END;
+$function$
+"
+change_event_member_role,EXISTS,"_event_id uuid, _member_id uuid, _new_role text",true,false,true,true,e495f0220de606825222473b2eb5088f,"CREATE OR REPLACE FUNCTION public.change_event_member_role(_event_id uuid, _member_id uuid, _new_role text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  current_user_id uuid;
+  owner_id uuid;
+  target_member public.event_members%ROWTYPE;
+BEGIN
+  current_user_id := auth.uid();
+
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'Bạn chưa đăng nhập.';
+  END IF;
+
+  IF _new_role NOT IN ('manager', 'co_owner') THEN
+    RAISE EXCEPTION 'Vai trò không hợp lệ.';
+  END IF;
+
+  SELECT organizer_id
+  INTO owner_id
+  FROM public.events
+  WHERE id = _event_id;
+
+  IF owner_id IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy sự kiện.';
+  END IF;
+
+  -- Chỉ Owner được đổi role
+  IF current_user_id <> owner_id THEN
+    RAISE EXCEPTION 'Chỉ Owner mới được thay đổi vai trò.';
+  END IF;
+
+  SELECT *
+  INTO target_member
+  FROM public.event_members
+  WHERE id = _member_id
+    AND event_id = _event_id
+  LIMIT 1;
+
+  IF target_member.id IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy thành viên.';
+  END IF;
+
+  -- Chỉ đổi thành viên đang active
+  IF target_member.status <> 'active' THEN
+    RAISE EXCEPTION 'Chỉ có thể đổi vai trò của thành viên đang hoạt động.';
+  END IF;
+
+  IF target_member.role = _new_role THEN
+    RAISE EXCEPTION 'Thành viên đã có vai trò này.';
+  END IF;
+
+  UPDATE public.event_members
+  SET
+    role = _new_role,
+    updated_at = now()
+  WHERE id = _member_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'role', _new_role
+  );
+END;
+$function$
+"
+create_event_upgrade_payment,EXISTS,"p_event_id uuid, p_user_id uuid, p_plan_code text, p_order_code text, p_expires_at timestamp with time zone",true,false,false,true,1dc5f9bd797d19d9be971c91f5bd9dcc,"CREATE OR REPLACE FUNCTION public.create_event_upgrade_payment(p_event_id uuid, p_user_id uuid, p_plan_code text, p_order_code text, p_expires_at timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+DECLARE
+  v_event public.events%ROWTYPE;
+  v_from public.billing_plans%ROWTYPE;
+  v_to public.billing_plans%ROWTYPE;
+  v_existing public.payments%ROWTYPE;
+  v_payment public.payments%ROWTYPE;
+  v_delta integer;
+  v_rank_from integer;
+  v_rank_to integer;
+  v_pending_count integer;
+BEGIN
+  -- The server passes the authenticated user ID; this RPC is service_role-only.
+  IF p_user_id IS NULL OR p_event_id IS NULL OR p_plan_code IS NULL THEN
+    RAISE EXCEPTION 'Thiếu thông tin nâng cấp gói.';
+  END IF;
+
+  SELECT * INTO v_event
+  FROM public.events
+  WHERE id = p_event_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_event.organizer_id IS DISTINCT FROM p_user_id THEN
+    RAISE EXCEPTION 'Chỉ Owner mới được nâng cấp sự kiện.';
+  END IF;
+
+  IF v_event.lifecycle_status IS DISTINCT FROM 'active' THEN
+    RAISE EXCEPTION 'Sự kiện chưa kích hoạt không thể nâng cấp.';
+  END IF;
+
+  v_rank_from := CASE v_event.plan_code
+    WHEN 'small' THEN 1 WHEN 'standard' THEN 2 WHEN 'pro' THEN 3 ELSE 0 END;
+  v_rank_to := CASE p_plan_code
+    WHEN 'small' THEN 1 WHEN 'standard' THEN 2 WHEN 'pro' THEN 3 ELSE 0 END;
+
+  IF v_rank_from = 0 OR v_rank_to <= v_rank_from THEN
+    RAISE EXCEPTION 'Chỉ cho phép nâng từ Small lên Standard/Pro hoặc Standard lên Pro.';
+  END IF;
+
+  SELECT * INTO v_from FROM public.billing_plans
+  WHERE code = v_event.plan_code AND billing_type = 'event';
+  IF NOT FOUND THEN RAISE EXCEPTION 'Không tìm thấy gói hiện tại.'; END IF;
+
+  SELECT * INTO v_to FROM public.billing_plans
+  WHERE code = p_plan_code AND billing_type = 'event' AND is_active = true;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Gói đích không khả dụng.'; END IF;
+
+  v_delta := v_to.price_vnd - v_from.price_vnd;
+  IF v_delta <= 0 THEN
+    RAISE EXCEPTION 'Giá nâng cấp không hợp lệ, vui lòng liên hệ hỗ trợ.';
+  END IF;
+
+  -- Serialise payment creation with other requests for the same event.
+  -- Do not silently replace a still-valid QR for another package.
+  SELECT count(*) INTO v_pending_count
+  FROM public.payments WHERE event_id = p_event_id AND status = 'pending';
+  IF v_pending_count > 1 THEN
+    RAISE EXCEPTION 'Sự kiện có nhiều đơn chờ, cần đối soát trước khi tiếp tục.';
+  END IF;
+
+  SELECT * INTO v_existing
+  FROM public.payments
+  WHERE event_id = p_event_id AND status = 'pending'
+  FOR UPDATE NOWAIT;
+
+  IF FOUND THEN
+    IF v_existing.expires_at > now() THEN
+      IF v_existing.plan_code IS DISTINCT FROM p_plan_code
+          OR v_existing.amount_vnd <> v_delta
+          OR v_existing.upgrade_from_plan_code IS DISTINCT FROM v_event.plan_code THEN
+        RAISE EXCEPTION 'Đang có đơn thanh toán khác. Vui lòng chờ đơn hết hạn hoặc liên hệ hỗ trợ.';
+      END IF;
+      v_payment := v_existing;
+    ELSE
+      UPDATE public.payments SET status = 'expired'
+      WHERE id = v_existing.id AND status = 'pending';
+    END IF;
+  END IF;
+
+  IF v_payment.id IS NULL THEN
+    IF p_order_code !~ '^JN[0-9]{10}$' THEN
+      RAISE EXCEPTION 'Mã đơn thanh toán không hợp lệ.';
+    END IF;
+    IF p_expires_at IS NULL OR p_expires_at <= now() OR p_expires_at > now() + interval '31 minutes' THEN
+      RAISE EXCEPTION 'Thời hạn thanh toán không hợp lệ.';
+    END IF;
+
+    INSERT INTO public.payments
+      (event_id, user_id, plan_code, upgrade_from_plan_code,
+       amount_vnd, order_code, status, expires_at)
+    VALUES
+      (p_event_id, p_user_id, p_plan_code, v_event.plan_code,
+       v_delta, p_order_code, 'pending', p_expires_at)
+    RETURNING * INTO v_payment;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'id', v_payment.id,
+    'order_code', v_payment.order_code,
+    'amount_vnd', v_payment.amount_vnd,
+    'plan_code', v_payment.plan_code,
+    'event_id', v_payment.event_id,
+    'status', v_payment.status,
+    'expires_at', v_payment.expires_at
+  );
+END;
+$function$
+"
+create_monthly_event,EXISTS,"p_user_id uuid, p_name text, p_description text, p_location text, p_latitude double precision, p_longitude double precision, p_checkin_radius integer, p_starts_at timestamp with time zone, p_expected integer, p_rooms jsonb",false,false,false,true,36c4911badb9cb5c8c0e4d4c52b3b263,"CREATE OR REPLACE FUNCTION public.create_monthly_event(p_user_id uuid, p_name text, p_description text, p_location text, p_latitude double precision, p_longitude double precision, p_checkin_radius integer, p_starts_at timestamp with time zone, p_expected integer, p_rooms jsonb)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_sub record;
+  v_plan record;
+  v_used bigint;
+  v_event_id uuid;
+  v_room jsonb;
+  v_room_name text;
+  v_room_code text;
+  v_position integer := 0;
+BEGIN
+  -- Hàm chỉ dành cho backend
+  IF auth.role() IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'Không có quyền tạo sự kiện Monthly.';
+  END IF;
+
+  -- Kiểm tra cấu hình gói
+  SELECT attendee_limit, event_limit
+  INTO v_plan
+  FROM public.billing_plans
+  WHERE code = 'monthly'
+    AND billing_type = 'monthly'
+    AND is_active = true;
+
+  IF NOT FOUND
+     OR v_plan.attendee_limit IS DISTINCT FROM 500
+     OR v_plan.event_limit IS DISTINCT FROM 3 THEN
+    RAISE EXCEPTION 'Cấu hình Monthly không hợp lệ.';
+  END IF;
+
+  -- Khóa subscription để chống tạo đồng thời
+  SELECT s.id, s.event_limit, s.expires_at
+  INTO v_sub
+  FROM public.user_subscriptions s
+  WHERE s.user_id = p_user_id
+    AND s.plan_code = 'monthly'
+    AND s.status = 'active'
+    AND s.starts_at <= now()
+    AND s.expires_at > now()
+  ORDER BY s.expires_at DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Gói Monthly đã hết hạn hoặc chưa kích hoạt.';
+  END IF;
+
+  -- Đếm số suất đã sử dụng
+  SELECT COUNT(*)
+  INTO v_used
+  FROM public.subscription_events
+  WHERE subscription_id = v_sub.id;
+
+  IF v_used >= LEAST(v_sub.event_limit, 3) THEN
+    RAISE EXCEPTION 'Đã sử dụng hết 3 suất sự kiện Monthly.';
+  END IF;
+
+  -- Kiểm tra thông tin sự kiện
+  IF p_name IS NULL
+     OR length(btrim(p_name)) NOT BETWEEN 1 AND 120
+     OR length(COALESCE(p_description, '')) > 2000
+     OR length(COALESCE(p_location, '')) > 200
+     OR p_expected IS NULL
+     OR p_expected NOT BETWEEN 1 AND 500
+     OR p_starts_at IS NULL
+     OR p_starts_at <= now()
+     OR p_checkin_radius IS NULL
+     OR p_checkin_radius NOT BETWEEN 20 AND 5000
+     OR p_latitude IS NULL
+     OR p_latitude NOT BETWEEN -90 AND 90
+     OR p_longitude IS NULL
+     OR p_longitude NOT BETWEEN -180 AND 180
+  THEN
+    RAISE EXCEPTION 'Thông tin sự kiện không hợp lệ.';
+  END IF;
+
+  IF p_rooms IS NULL
+     OR jsonb_typeof(p_rooms) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Danh sách phòng không hợp lệ.';
+  END IF;
+
+  IF jsonb_array_length(p_rooms) < 1 THEN
+    RAISE EXCEPTION 'Sự kiện phải có ít nhất một phòng.';
+  END IF;
+
+  -- Tạo sự kiện được hưởng quyền Monthly
+  INSERT INTO public.events (
+    organizer_id,
+    name,
+    description,
+    location,
+    latitude,
+    longitude,
+    checkin_radius,
+    starts_at,
+    expected_attendees,
+    plan_code,
+    attendee_limit,
+    lifecycle_status,
+    requested_plan_code
+  )
+  VALUES (
+    p_user_id,
+    btrim(p_name),
+    p_description,
+    p_location,
+    p_latitude,
+    p_longitude,
+    p_checkin_radius,
+    p_starts_at,
+    p_expected,
+    'monthly',
+    500,
+    'active',
+    NULL
+  )
+  RETURNING id INTO v_event_id;
+
+  -- Tạo các phòng
+  FOR v_room IN
+    SELECT value
+    FROM jsonb_array_elements(p_rooms) AS x(value)
+  LOOP
+    v_room_name :=
+      btrim(COALESCE(v_room->>'name', ''));
+
+    v_room_code :=
+      NULLIF(
+        upper(btrim(COALESCE(v_room->>'accessCode', ''))),
+        ''
+      );
+
+    IF length(v_room_name) NOT BETWEEN 1 AND 80 THEN
+      RAISE EXCEPTION 'Tên phòng không hợp lệ.';
+    END IF;
+
+    IF v_room_code IS NOT NULL
+       AND v_room_code !~ '^[A-Z0-9]{4,6}$' THEN
+      RAISE EXCEPTION 'Mã phòng không hợp lệ.';
+    END IF;
+
+    INSERT INTO public.event_rooms (
+      event_id,
+      name,
+      position,
+      access_code
+    )
+    VALUES (
+      v_event_id,
+      v_room_name,
+      v_position,
+      v_room_code
+    );
+
+    v_position := v_position + 1;
+  END LOOP;
+
+  -- Ghi nhận sự kiện đã dùng một suất Monthly
+  INSERT INTO public.subscription_events (
+    subscription_id,
+    event_id
+  )
+  VALUES (
+    v_sub.id,
+    v_event_id
+  );
+
+  RETURN v_event_id;
+END;
+$function$
+"
+delete_unpaid_event_draft,EXISTS,p_event_id uuid,true,false,true,true,b86724587d8a51e83877c5d92af3980f,"CREATE OR REPLACE FUNCTION public.delete_unpaid_event_draft(p_event_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_owner uuid;
+  v_status text;
+BEGIN
+  SELECT organizer_id, lifecycle_status
+  INTO v_owner, v_status
+  FROM public.events
+  WHERE id = p_event_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_owner IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'Bạn không có quyền xóa bản nháp.';
+  END IF;
+
+  IF v_status <> 'draft' THEN
+    RAISE EXCEPTION 'Chỉ được xóa bản nháp chưa kích hoạt.';
+  END IF;
+
+  -- Khóa các đơn để tránh thay đổi đồng thời
+  PERFORM 1
+  FROM public.payments
+  WHERE event_id = p_event_id
+  FOR UPDATE;
+
+  -- Không xóa khi đã ghi nhận tiền
+  IF EXISTS (
+    SELECT 1
+    FROM public.payments
+    WHERE event_id = p_event_id
+      AND (
+        status IN ('paid', 'refunded')
+        OR paid_at IS NOT NULL
+        OR sepay_transaction_id IS NOT NULL
+      )
+  ) THEN
+    RAISE EXCEPTION 'Sự kiện có giao dịch cần đối soát, không thể xóa.';
+  END IF;
+
+  -- Lưu liên kết sự kiện cũ, hủy các đơn pending
+  UPDATE public.payments
+  SET
+    cancelled_draft_event_id = COALESCE(
+      cancelled_draft_event_id,
+      event_id
+    ),
+    status = CASE
+      WHEN status = 'pending' THEN 'cancelled'
+      ELSE status
+    END
+  WHERE event_id = p_event_id;
+
+  -- Xóa sự kiện; lịch sử payments được giữ
+  DELETE FROM public.events
+  WHERE id = p_event_id
+    AND organizer_id = auth.uid()
+    AND lifecycle_status = 'draft';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Không thể xóa bản nháp.';
+  END IF;
+
+  RETURN true;
+END;
+$function$
+"
+get_active_monthly_subscription,EXISTS,p_user_id uuid,true,false,true,true,2f9cb76701dfce931a7c7620142a4326,"CREATE OR REPLACE FUNCTION public.get_active_monthly_subscription(p_user_id uuid)
+ RETURNS TABLE(subscription_id uuid, expires_at timestamp with time zone, event_limit integer, events_used bigint, events_remaining bigint)
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  SELECT
+    s.id,
+    s.expires_at,
+    s.event_limit,
+    COUNT(se.id),
+    GREATEST(s.event_limit - COUNT(se.id), 0)
+  FROM public.user_subscriptions s
+  LEFT JOIN public.subscription_events se
+    ON se.subscription_id = s.id
+  WHERE s.user_id = p_user_id
+    AND (
+      auth.uid() = p_user_id
+      OR auth.role() = 'service_role'
+    )
+    AND s.plan_code = 'monthly'
+    AND s.status = 'active'
+    AND s.starts_at <= now()
+    AND s.expires_at > now()
+  GROUP BY s.id, s.expires_at, s.event_limit
+  ORDER BY s.expires_at DESC
+  LIMIT 1;
+$function$
+"
+get_event_role,EXISTS,_event_id uuid,true,true,true,true,6bd765589fd9c5f8ea27fb9ec3ff5dcd,"CREATE OR REPLACE FUNCTION public.get_event_role(_event_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  current_user_id uuid;
+  member_role text;
+BEGIN
+  current_user_id := auth.uid();
+
+  IF current_user_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  -- Người tạo event luôn là Owner
+  IF EXISTS (
+    SELECT 1
+    FROM public.events e
+    WHERE e.id = _event_id
+      AND e.organizer_id = current_user_id
+  ) THEN
+    RETURN 'owner';
+  END IF;
+
+  -- Co-owner / Manager chỉ có quyền khi status = active
+  SELECT em.role
+  INTO member_role
+  FROM public.event_members em
+  WHERE em.event_id = _event_id
+    AND em.user_id = current_user_id
+    AND em.status = 'active'
+  LIMIT 1;
+
+  RETURN member_role;
+END;
+$function$
+"
+invite_event_member,EXISTS,"_event_id uuid, _email text, _role text",true,false,true,true,8daf6ffe549d894be0cff45cf24a6e80,"CREATE OR REPLACE FUNCTION public.invite_event_member(_event_id uuid, _email text, _role text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  current_user_id uuid;
+  v_current_role text;
+
+  target_user_id uuid;
+  target_email text;
+
+  owner_id uuid;
+
+  member_status text;
+  existing_member public.event_members%ROWTYPE;
+BEGIN
+  current_user_id := auth.uid();
+
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'Bạn chưa đăng nhập.';
+  END IF;
+
+  IF _role NOT IN ('manager', 'co_owner') THEN
+    RAISE EXCEPTION 'Vai trò không hợp lệ.';
+  END IF;
+
+  SELECT organizer_id
+  INTO owner_id
+  FROM public.events
+  WHERE id = _event_id;
+
+  IF owner_id IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy sự kiện.';
+  END IF;
+
+  -- Lấy role của người đang thao tác
+  v_current_role := public.get_event_role(_event_id);
+
+  IF v_current_role IS NULL THEN
+    RAISE EXCEPTION 'Bạn không có quyền quản lý sự kiện này.';
+  END IF;
+
+  -- Manager không được mời ai
+  IF v_current_role = 'manager' THEN
+    RAISE EXCEPTION 'Manager không có quyền mời thành viên quản lý.';
+  END IF;
+
+  -- Tìm tài khoản Joinly bằng email chính xác
+  SELECT id, email
+  INTO target_user_id, target_email
+  FROM auth.users
+  WHERE LOWER(email) = LOWER(TRIM(_email))
+  LIMIT 1;
+
+  IF target_user_id IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy tài khoản Joinly với email này.';
+  END IF;
+
+  -- Không tự mời chính mình
+  IF target_user_id = current_user_id THEN
+    RAISE EXCEPTION 'Bạn không thể tự mời chính mình.';
+  END IF;
+
+  -- Không mời Owner
+  IF target_user_id = owner_id THEN
+    RAISE EXCEPTION 'Tài khoản này đã là Owner của sự kiện.';
+  END IF;
+
+  -- Kiểm tra thành viên cũ
+  SELECT *
+  INTO existing_member
+  FROM public.event_members
+  WHERE event_id = _event_id
+    AND user_id = target_user_id
+  LIMIT 1;
+
+  IF existing_member.id IS NOT NULL THEN
+    IF existing_member.status = 'active' THEN
+      RAISE EXCEPTION 'Tài khoản này đã là thành viên quản lý của sự kiện.';
+    END IF;
+
+    IF existing_member.status = 'pending' THEN
+      RAISE EXCEPTION 'Tài khoản này đang có lời mời chờ duyệt.';
+    END IF;
+  END IF;
+
+  -- Manager: Owner hoặc Co-owner mời đều active ngay
+  IF _role = 'manager' THEN
+    member_status := 'active';
+  END IF;
+
+  -- Co-owner
+  IF _role = 'co_owner' THEN
+    IF v_current_role = 'owner' THEN
+      member_status := 'active';
+
+    ELSIF v_current_role = 'co_owner' THEN
+      member_status := 'pending';
+
+    ELSE
+      RAISE EXCEPTION 'Bạn không có quyền mời Co-owner.';
+    END IF;
+  END IF;
+
+  -- Nếu user từng bị rejected thì dùng lại row cũ
+  IF existing_member.id IS NOT NULL THEN
+    UPDATE public.event_members
+    SET
+      role = _role,
+      status = member_status,
+      invited_by = current_user_id,
+      updated_at = now()
+    WHERE id = existing_member.id;
+
+  ELSE
+    INSERT INTO public.event_members (
+      event_id,
+      user_id,
+      role,
+      status,
+      invited_by
+    )
+    VALUES (
+      _event_id,
+      target_user_id,
+      _role,
+      member_status,
+      current_user_id
+    );
+  END IF;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'email', target_email,
+    'role', _role,
+    'status', member_status
+  );
+END;
+$function$
+"
+list_event_checkin_operators,EXISTS,_event_id uuid,true,true,true,true,8eedeeadae1307553a464e41ffdbed8d,"CREATE OR REPLACE FUNCTION public.list_event_checkin_operators(_event_id uuid)
+ RETURNS TABLE(user_id uuid, full_name text, role text)
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  WITH permission AS (
+    SELECT public.get_event_role(_event_id) AS current_role
+  ),
+
+  operators AS (
+    -- Owner
+    SELECT
+      e.organizer_id AS user_id,
+      'owner'::text AS role
+    FROM public.events e
+    WHERE e.id = _event_id
+
+    UNION
+
+    -- Co-owner + Manager
+    SELECT
+      em.user_id,
+      em.role
+    FROM public.event_members em
+    WHERE em.event_id = _event_id
+      AND em.role IN ('co_owner', 'manager')
+  )
+
+  SELECT
+    o.user_id,
+    COALESCE(
+      NULLIF(TRIM(p.full_name), ''),
+      'Thành viên'
+    ) AS full_name,
+    o.role
+  FROM operators o
+  LEFT JOIN public.profiles p
+    ON p.id = o.user_id
+
+  WHERE (
+    SELECT current_role
+    FROM permission
+  ) IS NOT NULL;
+$function$
+"
+list_event_members,EXISTS,_event_id uuid,true,false,true,true,da112d16cebef7dd500e106855be5507,"CREATE OR REPLACE FUNCTION public.list_event_members(_event_id uuid)
+ RETURNS TABLE(member_id uuid, user_id uuid, email text, role text, status text, invited_by uuid, created_at timestamp with time zone)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_current_role text;
+BEGIN
+  v_current_role := public.get_event_role(_event_id);
+
+  -- Chỉ Owner / Co-owner được xem danh sách quản trị
+  IF v_current_role IS NULL
+     OR v_current_role = 'manager' THEN
+    RAISE EXCEPTION 'Bạn không có quyền xem danh sách thành viên quản lý.';
+  END IF;
+
+  RETURN QUERY
+
+  -- Owner
+  SELECT
+    NULL::uuid AS member_id,
+    u.id AS user_id,
+    u.email::text AS email,
+    'owner'::text AS role,
+    'active'::text AS status,
+    NULL::uuid AS invited_by,
+    e.created_at AS created_at
+  FROM public.events e
+  JOIN auth.users u
+    ON u.id = e.organizer_id
+  WHERE e.id = _event_id
+
+  UNION ALL
+
+  -- Co-owner / Manager
+  SELECT
+    em.id AS member_id,
+    u.id AS user_id,
+    u.email::text AS email,
+    em.role::text AS role,
+    em.status::text AS status,
+    em.invited_by AS invited_by,
+    em.created_at AS created_at
+  FROM public.event_members em
+  JOIN auth.users u
+    ON u.id = em.user_id
+  WHERE em.event_id = _event_id
+    AND em.status IN ('active', 'pending')
+
+  ORDER BY
+    role,
+    created_at;
+END;
+$function$
+"
+process_sepay_payment,EXISTS,"p_order_code text, p_transaction_id bigint, p_transfer_amount bigint, p_gateway text, p_reference_code text",true,false,false,true,63e1ac560bfe2421f92bafc7caa64569,"CREATE OR REPLACE FUNCTION public.process_sepay_payment(p_order_code text, p_transaction_id bigint, p_transfer_amount bigint, p_gateway text, p_reference_code text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_payment public.payments%ROWTYPE;
+  v_plan public.billing_plans%ROWTYPE;
+  v_event public.events%ROWTYPE;
+
+  v_start timestamptz;
+  v_latest_expiry timestamptz;
+BEGIN
+
+  -- 1. Khóa đơn để chống webhook xử lý đồng thời
+  SELECT *
+  INTO v_payment
+  FROM public.payments
+  WHERE order_code = p_order_code
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'reason', 'payment_not_found'
+    );
+  END IF;
+
+  -- 2. Đơn đã thanh toán trước đó
+  IF v_payment.status = 'paid' THEN
+    RETURN jsonb_build_object(
+      'success', true,
+      'reason', 'already_paid'
+    );
+  END IF;
+
+  -- 3. Chỉ xử lý đơn pending
+  IF v_payment.status <> 'pending' THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'reason', 'invalid_payment_status'
+    );
+  END IF;
+
+  -- 4. Kiểm tra hạn thanh toán
+  IF v_payment.expires_at IS NOT NULL
+     AND v_payment.expires_at <= now() THEN
+
+    UPDATE public.payments
+    SET status = 'expired'
+    WHERE id = v_payment.id;
+
+    RETURN jsonb_build_object(
+      'success', false,
+      'reason', 'order_expired'
+    );
+  END IF;
+
+  -- 5. Kiểm tra đúng số tiền
+  IF v_payment.amount_vnd <> p_transfer_amount THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'reason', 'amount_mismatch'
+    );
+  END IF;
+
+  -- 6. Chống dùng lại một giao dịch ngân hàng
+  IF EXISTS (
+    SELECT 1
+    FROM public.payments
+    WHERE sepay_transaction_id = p_transaction_id
+      AND id <> v_payment.id
+  ) THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'reason', 'transaction_already_used'
+    );
+  END IF;
+
+  -- 7. Lấy thông tin gói
+  SELECT *
+  INTO v_plan
+  FROM public.billing_plans
+  WHERE code = v_payment.plan_code
+    AND is_active = true;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Billing plan not found';
+  END IF;
+
+  -- 8. Kiểm tra sự kiện trước khi đánh dấu paid
+  IF v_plan.billing_type = 'event' THEN
+
+    IF v_payment.event_id IS NULL THEN
+      RAISE EXCEPTION 'Missing event_id';
+    END IF;
+
+    SELECT *
+    INTO v_event
+    FROM public.events
+    WHERE id = v_payment.event_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Event not found';
+    END IF;
+
+    IF v_event.organizer_id <> v_payment.user_id THEN
+      RAISE EXCEPTION 'Payment owner mismatch';
+    END IF;
+
+    IF v_event.lifecycle_status = 'draft' THEN
+
+      IF v_event.requested_plan_code
+         IS DISTINCT FROM v_plan.code THEN
+        RAISE EXCEPTION 'Draft plan mismatch';
+      END IF;
+
+    ELSIF v_event.lifecycle_status = 'active' THEN
+
+      -- Chỉ cho phép nâng gói, không mua trùng/hạ gói
+      IF (
+        CASE v_plan.code
+          WHEN 'free' THEN 0
+          WHEN 'small' THEN 1
+          WHEN 'standard' THEN 2
+          WHEN 'pro' THEN 3
+          ELSE -1
+        END
+      ) <= (
+        CASE v_event.plan_code
+          WHEN 'free' THEN 0
+          WHEN 'small' THEN 1
+          WHEN 'standard' THEN 2
+          WHEN 'pro' THEN 3
+          ELSE 4
+        END
+      ) THEN
+        RAISE EXCEPTION 'Invalid plan upgrade';
+      END IF;
+
+    ELSE
+      RAISE EXCEPTION 'Invalid event status';
+    END IF;
+
+    IF v_event.expected_attendees > v_plan.attendee_limit THEN
+      RAISE EXCEPTION 'Event exceeds purchased plan limit';
+    END IF;
+
+  END IF;
+
+  -- 9. Đánh dấu thanh toán thành công
+  UPDATE public.payments
+  SET
+    status = 'paid',
+    sepay_transaction_id = p_transaction_id,
+    sepay_reference_code = p_reference_code,
+    bank_gateway = p_gateway,
+    paid_at = now()
+  WHERE id = v_payment.id;
+
+  -- 10. Kích hoạt sự kiện
+  IF v_plan.billing_type = 'event' THEN
+
+    UPDATE public.events
+    SET
+      plan_code = v_plan.code,
+      attendee_limit = v_plan.attendee_limit,
+      lifecycle_status = 'active',
+      requested_plan_code = NULL,
+      draft_updated_at = NULL
+    WHERE id = v_payment.event_id;
+
+  -- 11. Monthly giữ logic gia hạn hiện tại
+  ELSIF v_plan.billing_type = 'monthly' THEN
+
+    SELECT MAX(expires_at)
+    INTO v_latest_expiry
+    FROM public.user_subscriptions
+    WHERE user_id = v_payment.user_id
+      AND plan_code = 'monthly'
+      AND expires_at > now();
+
+    v_start := GREATEST(
+      now(),
+      COALESCE(v_latest_expiry, now())
+    );
+
+    INSERT INTO public.user_subscriptions (
+      user_id,
+      plan_code,
+      payment_id,
+      status,
+      starts_at,
+      expires_at,
+      event_limit
+    )
+    VALUES (
+      v_payment.user_id,
+      'monthly',
+      v_payment.id,
+      'active',
+      v_start,
+      v_start + make_interval(
+        days => COALESCE(v_plan.duration_days, 30)
+      ),
+      COALESCE(v_plan.event_limit, 3)
+    );
+
+  END IF;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'reason', 'payment_completed',
+    'payment_id', v_payment.id,
+    'plan_code', v_plan.code
+  );
+
+END;
+$function$
+"
+quiz_delete_confirmed,EXISTS,"p_quiz_id uuid, p_confirm_active boolean",true,false,false,true,34f4c2564bcdc79d9ce0c0b63f0cc49e,"CREATE OR REPLACE FUNCTION public.quiz_delete_confirmed(p_quiz_id uuid, p_confirm_active boolean)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_has_active BOOLEAN;
+BEGIN
+  -- Khóa bộ Quiz trong lúc xóa.
+  PERFORM 1
+  FROM public.quizzes
+  WHERE id = p_quiz_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'QUIZ_NOT_FOUND';
+  END IF;
+
+  -- Kiểm tra phiên đang mở.
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.quiz_sessions
+    WHERE quiz_id = p_quiz_id
+      AND status IN ('waiting', 'active', 'paused')
+  )
+  INTO v_has_active;
+
+  -- Phải có xác nhận rõ ràng.
+  IF v_has_active
+     AND NOT COALESCE(p_confirm_active, FALSE)
+  THEN
+    RAISE EXCEPTION 'QUIZ_CONFIRM_ACTIVE_REQUIRED';
+  END IF;
+
+  -- Xóa câu trả lời trước để tránh
+  -- ràng buộc khóa ngoại của câu hỏi.
+  DELETE FROM public.quiz_answers
+  WHERE quiz_id = p_quiz_id;
+
+  -- Xóa lượt tham gia và điểm.
+  DELETE FROM public.quiz_attempts
+  WHERE quiz_id = p_quiz_id;
+
+  -- Xóa mọi phiên, kể cả đang mở.
+  DELETE FROM public.quiz_sessions
+  WHERE quiz_id = p_quiz_id;
+
+  -- Xóa câu hỏi.
+  DELETE FROM public.quiz_questions
+  WHERE quiz_id = p_quiz_id;
+
+  -- Xóa bộ Quiz.
+  DELETE FROM public.quizzes
+  WHERE id = p_quiz_id;
+
+  RETURN TRUE;
+END;
+$function$
+"
+quiz_finish_attempt,EXISTS,"p_attempt_id uuid, p_token_hash text",false,false,false,true,a24a3ed4184d05590875578bc3b1e275,"CREATE OR REPLACE FUNCTION public.quiz_finish_attempt(p_attempt_id uuid, p_token_hash text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_attempt public.quiz_attempts%ROWTYPE;
+  v_session public.quiz_sessions%ROWTYPE;
+
+  v_total INTEGER;
+  v_answered INTEGER;
+BEGIN
+
+  -- 1. Xác thực người chơi.
+
+  SELECT *
+  INTO v_attempt
+  FROM public.quiz_attempts
+  WHERE id = p_attempt_id
+    AND player_token_hash = p_token_hash
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'invalid_player'
+    );
+  END IF;
+
+  SELECT *
+  INTO v_session
+  FROM public.quiz_sessions
+  WHERE id = v_attempt.session_id
+    AND quiz_id = v_attempt.quiz_id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'invalid_session'
+    );
+  END IF;
+
+  -- 2. Kiểm tra điều kiện hoàn thành.
+
+  IF v_attempt.status <> 'submitted' THEN
+
+    IF v_session.mode = 'self_paced' THEN
+
+      IF v_session.status <> 'active' THEN
+        RETURN jsonb_build_object(
+          'status', 'not_active'
+        );
+      END IF;
+
+      SELECT COUNT(*)
+      INTO v_total
+      FROM public.quiz_questions
+      WHERE quiz_id = v_attempt.quiz_id;
+
+      SELECT COUNT(*)
+      INTO v_answered
+      FROM public.quiz_answers
+      WHERE attempt_id = v_attempt.id;
+
+      IF v_answered < v_total THEN
+        RETURN jsonb_build_object(
+          'status', 'incomplete',
+          'answered_count', v_answered,
+          'total_questions', v_total
+        );
+      END IF;
+
+    ELSIF v_session.mode = 'live' THEN
+
+      -- Live Quiz chỉ được xem kết quả
+      -- khi BTC kết thúc phiên chơi.
+
+      IF v_session.status <> 'finished' THEN
+        RETURN jsonb_build_object(
+          'status', 'not_finished'
+        );
+      END IF;
+
+    ELSE
+      RETURN jsonb_build_object(
+        'status', 'invalid_mode'
+      );
+    END IF;
+
+    -- 3. Đánh dấu hoàn thành.
+
+    UPDATE public.quiz_attempts
+    SET
+      status = 'submitted',
+      completed_at = statement_timestamp()
+    WHERE id = v_attempt.id;
+
+  END IF;
+
+  -- 4. Trả kết quả cuối cùng.
+
+  SELECT COUNT(*)
+  INTO v_total
+  FROM public.quiz_questions
+  WHERE quiz_id = v_attempt.quiz_id;
+
+  RETURN jsonb_build_object(
+    'status', 'ok',
+    'score', v_attempt.score,
+    'correct_count', v_attempt.correct_count,
+    'total_questions', v_total
+  );
+
+END;
+$function$
+"
+quiz_host_control,EXISTS,"p_session_id uuid, p_action text",false,false,false,true,8e6185ec5afc1dc04d22ad3e7dd450f8,"CREATE OR REPLACE FUNCTION public.quiz_host_control(p_session_id uuid, p_action text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_session public.quiz_sessions%ROWTYPE;
+  v_total INTEGER;
+  v_seconds INTEGER;
+  v_now TIMESTAMPTZ;
+BEGIN
+
+  IF p_action IS NULL OR p_action NOT IN (
+    'start',
+    'next',
+    'pause',
+    'resume',
+    'reveal',
+    'finish',
+    'close'
+  ) THEN
+    RAISE EXCEPTION
+      'Thao tác Live Quiz không hợp lệ.';
+  END IF;
+
+  -- Khóa phiên tránh hai Host thao tác đồng thời.
+
+  SELECT *
+  INTO v_session
+  FROM public.quiz_sessions
+  WHERE id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'Không tìm thấy phiên Quiz.';
+  END IF;
+
+  IF v_session.mode <> 'live' THEN
+    RAISE EXCEPTION
+      'Đây không phải phiên Live Quiz.';
+  END IF;
+
+  v_now := clock_timestamp();
+
+  SELECT COUNT(*)::INTEGER
+  INTO v_total
+  FROM public.quiz_questions
+  WHERE quiz_id = v_session.quiz_id;
+
+
+  -- ==========================================
+  -- START
+  -- ==========================================
+
+  IF p_action = 'start' THEN
+
+    IF v_session.status <> 'waiting' THEN
+      RAISE EXCEPTION
+        'Quiz không còn ở phòng chờ.';
+    END IF;
+
+    IF v_total = 0 THEN
+      RAISE EXCEPTION
+        'Quiz chưa có câu hỏi.';
+    END IF;
+
+    UPDATE public.quiz_sessions
+    SET
+      status = 'active',
+      current_question = 0,
+      question_started_at = v_now,
+      started_at = COALESCE(started_at, v_now),
+      paused_at = NULL,
+      results_revealed = FALSE,
+      revealed_at = NULL
+    WHERE id = p_session_id
+    RETURNING * INTO v_session;
+
+
+  -- ==========================================
+  -- REVEAL
+  -- CÔNG BỐ ĐÁP ÁN ĐÚNG
+  -- ==========================================
+
+  ELSIF p_action = 'reveal' THEN
+
+    IF v_session.status <> 'active' THEN
+      RAISE EXCEPTION
+        'Quiz phải đang chạy để công bố đáp án.';
+    END IF;
+
+    -- Lấy thời gian câu hỏi hiện tại.
+
+    SELECT time_limit_seconds
+    INTO v_seconds
+    FROM public.quiz_questions
+    WHERE quiz_id = v_session.quiz_id
+    ORDER BY position, id
+    LIMIT 1
+    OFFSET v_session.current_question;
+
+    IF NOT FOUND
+       OR v_session.question_started_at IS NULL
+    THEN
+      RAISE EXCEPTION
+        'Không tìm thấy câu hỏi đang chạy.';
+    END IF;
+
+    -- Chỉ được công bố sau khi hết giờ.
+    -- Sử dụng đồng hồ database.
+
+    IF v_now <
+       v_session.question_started_at
+       + v_seconds * INTERVAL '1 second'
+    THEN
+      RAISE EXCEPTION
+        'Chưa hết thời gian trả lời.';
+    END IF;
+
+    -- Nếu đã công bố thì giữ nguyên kết quả.
+    -- Không tạo một lần công bố mới.
+
+    IF NOT v_session.results_revealed THEN
+
+      UPDATE public.quiz_sessions
+      SET
+        results_revealed = TRUE,
+        revealed_at = v_now
+      WHERE id = p_session_id
+      RETURNING * INTO v_session;
+
+    END IF;
+
+
+  -- ==========================================
+  -- NEXT
+  -- CHUYỂN CÂU TIẾP THEO
+  -- ==========================================
+
+  ELSIF p_action = 'next' THEN
+
+    IF v_session.status <> 'active' THEN
+      RAISE EXCEPTION
+        'Quiz phải đang chạy để chuyển câu.';
+    END IF;
+
+    -- Không cho BTC bỏ qua phần công bố.
+
+    IF NOT v_session.results_revealed THEN
+      RAISE EXCEPTION
+        'Hãy công bố kết quả câu hiện tại trước.';
+    END IF;
+
+    IF v_session.current_question + 1 >= v_total THEN
+      RAISE EXCEPTION
+        'Đã đến câu cuối. Hãy kết thúc Quiz.';
+    END IF;
+
+    UPDATE public.quiz_sessions
+    SET
+      current_question = current_question + 1,
+      question_started_at = v_now,
+      paused_at = NULL,
+      results_revealed = FALSE,
+      revealed_at = NULL
+    WHERE id = p_session_id
+    RETURNING * INTO v_session;
+
+
+  -- ==========================================
+  -- PAUSE
+  -- ==========================================
+
+  ELSIF p_action = 'pause' THEN
+
+    IF v_session.status <> 'active' THEN
+      RAISE EXCEPTION
+        'Quiz không ở trạng thái đang chạy.';
+    END IF;
+
+    UPDATE public.quiz_sessions
+    SET
+      status = 'paused',
+      paused_at = v_now
+    WHERE id = p_session_id
+    RETURNING * INTO v_session;
+
+
+  -- ==========================================
+  -- RESUME
+  -- ==========================================
+
+  ELSIF p_action = 'resume' THEN
+
+    IF v_session.status <> 'paused'
+       OR v_session.paused_at IS NULL
+    THEN
+      RAISE EXCEPTION
+        'Quiz không ở trạng thái tạm dừng.';
+    END IF;
+
+    UPDATE public.quiz_sessions
+    SET
+      status = 'active',
+
+      -- Bảo toàn thời gian còn lại.
+      question_started_at =
+        question_started_at +
+        (v_now - paused_at),
+
+      paused_at = NULL
+    WHERE id = p_session_id
+    RETURNING * INTO v_session;
+
+
+  -- ==========================================
+  -- FINISH
+  -- ==========================================
+
+  ELSIF p_action = 'finish' THEN
+
+    IF v_session.status NOT IN ('active', 'paused') THEN
+      RAISE EXCEPTION
+        'Không thể kết thúc phiên này.';
+    END IF;
+
+    UPDATE public.quiz_sessions
+    SET
+      status = 'finished',
+      finished_at = v_now,
+      paused_at = NULL,
+      results_revealed = TRUE,
+      revealed_at = COALESCE(revealed_at, v_now)
+    WHERE id = p_session_id
+    RETURNING * INTO v_session;
+
+
+  -- ==========================================
+  -- CLOSE
+  -- ==========================================
+
+  ELSIF p_action = 'close' THEN
+
+    IF v_session.status <> 'waiting' THEN
+      RAISE EXCEPTION
+        'Chỉ được hủy phòng đang chờ.';
+    END IF;
+
+    UPDATE public.quiz_sessions
+    SET
+      status = 'closed',
+      finished_at = v_now,
+      paused_at = NULL
+    WHERE id = p_session_id
+    RETURNING * INTO v_session;
+
+  END IF;
+
+
+  -- ==========================================
+  -- KẾT QUẢ TRẢ VỀ
+  -- ==========================================
+
+  RETURN jsonb_build_object(
+    'ok', TRUE,
+    'session_id', v_session.id,
+    'status', v_session.status,
+    'current_question', v_session.current_question,
+    'total_questions', v_total,
+    'question_started_at',
+      v_session.question_started_at,
+    'results_revealed',
+      v_session.results_revealed,
+    'revealed_at', v_session.revealed_at,
+    'started_at', v_session.started_at,
+    'finished_at', v_session.finished_at
+  );
+
+END;
+$function$
+"
+quiz_live_auto_control,EXISTS,"p_session_id uuid, p_action text",false,false,false,true,cd706f971cf936efdcb15d2e0be0dfb6,"CREATE OR REPLACE FUNCTION public.quiz_live_auto_control(p_session_id uuid, p_action text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_s public.quiz_sessions%ROWTYPE;
+
+  v_now TIMESTAMPTZ;
+  v_deadline TIMESTAMPTZ;
+  v_transition TIMESTAMPTZ;
+
+  v_total INTEGER;
+  v_players INTEGER;
+  v_answered INTEGER;
+  v_duration INTEGER;
+  v_required_players INTEGER;
+
+  v_question_id UUID;
+  v_i INTEGER;
+BEGIN
+
+  -- ========================================
+  -- VALIDATE ACTION
+  -- ========================================
+
+  IF p_action IS NULL
+     OR p_action NOT IN (
+       'start',
+       'pause',
+       'resume',
+       'skip',
+       'tick'
+     )
+  THEN
+    RAISE EXCEPTION
+      'Lệnh Live Quiz không hợp lệ.';
+  END IF;
+
+
+  -- Khóa phiên trong toàn bộ transaction.
+  -- Tránh hai thiết bị chuyển câu cùng lúc.
+
+  SELECT *
+  INTO v_s
+  FROM public.quiz_sessions
+  WHERE id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_s.mode <> 'live' THEN
+    RAISE EXCEPTION
+      'Không tìm thấy phiên Live Quiz.';
+  END IF;
+
+  v_now := clock_timestamp();
+
+
+  SELECT COUNT(*)::INTEGER
+  INTO v_total
+  FROM public.quiz_questions
+  WHERE quiz_id = v_s.quiz_id;
+
+
+  -- ========================================
+  -- START -> INTRO
+  -- ========================================
+
+  IF p_action = 'start' THEN
+
+    IF v_s.status <> 'waiting' THEN
+      RAISE EXCEPTION
+        'Phiên không ở phòng chờ.';
+    END IF;
+
+    IF v_total = 0 THEN
+      RAISE EXCEPTION
+        'Quiz chưa có câu hỏi.';
+    END IF;
+
+    SELECT COUNT(*)::INTEGER
+    INTO v_players
+    FROM public.quiz_attempts
+    WHERE session_id = p_session_id;
+
+    IF v_players = 0 THEN
+      RAISE EXCEPTION
+        'Cần ít nhất một người chơi.';
+    END IF;
+
+    UPDATE public.quiz_sessions
+    SET
+      auto_play_enabled = TRUE,
+      scoring_player_count = v_players,
+
+      status = 'active',
+      live_phase = 'intro',
+
+      current_question = 0,
+
+      started_at = COALESCE(
+        started_at,
+        v_now
+      ),
+
+      phase_started_at = v_now,
+
+      -- Chưa tính giờ trả lời.
+      question_started_at = NULL,
+
+      paused_at = NULL,
+
+      results_revealed = FALSE,
+      revealed_at = NULL
+
+    WHERE id = p_session_id
+    RETURNING * INTO v_s;
+
+
+  -- ========================================
+  -- PAUSE
+  -- ========================================
+
+  ELSIF p_action = 'pause' THEN
+
+    IF NOT v_s.auto_play_enabled
+       OR v_s.status <> 'active'
+    THEN
+      RAISE EXCEPTION
+        'Không thể tạm dừng.';
+    END IF;
+
+    UPDATE public.quiz_sessions
+    SET
+      status = 'paused',
+      paused_at = v_now
+
+    WHERE id = p_session_id
+    RETURNING * INTO v_s;
+
+
+  -- ========================================
+  -- RESUME
+  -- ========================================
+
+  ELSIF p_action = 'resume' THEN
+
+    IF NOT v_s.auto_play_enabled
+       OR v_s.status <> 'paused'
+       OR v_s.paused_at IS NULL
+    THEN
+      RAISE EXCEPTION
+        'Phiên chưa được tạm dừng.';
+    END IF;
+
+    -- Dời mốc thời gian theo đúng
+    -- khoảng thời gian đã Pause.
+
+    UPDATE public.quiz_sessions
+    SET
+      status = 'active',
+
+      phase_started_at =
+        phase_started_at
+        + (v_now - paused_at),
+
+      question_started_at =
+        CASE
+          WHEN question_started_at IS NULL
+            THEN NULL
+          ELSE
+            question_started_at
+            + (v_now - paused_at)
+        END,
+
+      paused_at = NULL
+
+    WHERE id = p_session_id
+    RETURNING * INTO v_s;
+
+
+  -- ========================================
+  -- SKIP -> CÂU KẾ TIẾP
+  -- ========================================
+
+  ELSIF p_action = 'skip' THEN
+
+    IF NOT v_s.auto_play_enabled
+       OR v_s.status <> 'active'
+    THEN
+      RAISE EXCEPTION
+        'Không thể Skip lúc này.';
+    END IF;
+
+    -- Câu cuối: kết thúc phiên.
+    -- Không công bố đáp án câu bị Skip.
+
+    IF v_s.current_question + 1 >= v_total THEN
+
+      UPDATE public.quiz_sessions
+      SET
+        status = 'finished',
+        live_phase = 'finished',
+
+        finished_at = v_now,
+        phase_started_at = v_now,
+
+        results_revealed = FALSE,
+        revealed_at = NULL,
+
+        paused_at = NULL
+
+      WHERE id = p_session_id
+      RETURNING * INTO v_s;
+
+    ELSE
+
+      -- Câu 1 -> Intro câu 2.
+      -- Bỏ qua Reveal và Leaderboard.
+
+      UPDATE public.quiz_sessions
+      SET
+        current_question =
+          current_question + 1,
+
+        live_phase = 'intro',
+
+        phase_started_at = v_now,
+        question_started_at = NULL,
+
+        results_revealed = FALSE,
+        revealed_at = NULL
+
+      WHERE id = p_session_id
+      RETURNING * INTO v_s;
+
+    END IF;
+
+
+  -- ========================================
+  -- TICK: TỰ ĐỒNG BỘ GIAI ĐOẠN
+  -- ========================================
+
+  ELSIF p_action = 'tick' THEN
+
+    IF v_s.auto_play_enabled
+       AND v_s.status = 'active'
+    THEN
+
+      -- Có thể phải chuyển nhiều giai đoạn
+      -- khi trình duyệt tạm mất kết nối.
+
+      FOR v_i IN 1..(v_total * 4 + 4) LOOP
+
+        EXIT WHEN v_s.status <> 'active';
+
+        EXIT WHEN v_s.live_phase NOT IN (
+          'intro',
+          'question',
+          'reveal',
+          'leaderboard'
+        );
+
+        IF v_s.phase_started_at IS NULL THEN
+          RAISE EXCEPTION
+            'Thiếu mốc thời gian giai đoạn.';
+        END IF;
+
+
+        -- ==================================
+        -- XÁC ĐỊNH THỜI GIAN GIAI ĐOẠN
+        -- ==================================
+
+        IF v_s.live_phase = 'intro' THEN
+
+          v_duration := 9;
+
+
+        ELSIF v_s.live_phase = 'question' THEN
+
+          SELECT id, time_limit_seconds
+          INTO v_question_id, v_duration
+          FROM public.quiz_questions
+          WHERE quiz_id = v_s.quiz_id
+          ORDER BY position, id
+          OFFSET v_s.current_question
+          LIMIT 1;
+
+          IF NOT FOUND THEN
+            RAISE EXCEPTION
+              'Không tìm thấy câu hỏi hiện tại.';
+          END IF;
+
+
+        ELSIF v_s.live_phase = 'reveal' THEN
+
+          v_duration := v_s.reveal_seconds;
+
+
+        ELSE
+
+          v_duration :=
+            v_s.leaderboard_seconds;
+
+        END IF;
+
+
+        v_deadline :=
+          v_s.phase_started_at
+          + v_duration * INTERVAL '1 second';
+
+
+        -- ==================================
+        -- CHƯA HẾT THỜI GIAN
+        -- ==================================
+
+        IF v_now < v_deadline THEN
+
+          -- Chỉ QUESTION được kết thúc sớm.
+          -- INTRO luôn phải đủ 5 giây.
+
+          IF v_s.live_phase <> 'question' THEN
+            EXIT;
+          END IF;
+
+
+          -- Đếm số người đã trả lời câu này.
+          -- Chỉ đếm thuộc đúng session.
+
+          SELECT COUNT(
+            DISTINCT a.id
+          )::INTEGER
+          INTO v_answered
+          FROM public.quiz_answers ans
+          JOIN public.quiz_attempts a
+            ON a.id = ans.attempt_id
+          WHERE a.session_id = p_session_id
+            AND ans.question_id = v_question_id;
+
+
+          -- Số người chơi cố định lúc Start.
+          -- Tránh người mới làm thay đổi mốc
+          -- hoàn tất của câu đang chơi.
+
+          IF v_s.scoring_player_count IS NOT NULL THEN
+
+            v_required_players :=
+              v_s.scoring_player_count;
+
+          ELSE
+
+            SELECT COUNT(*)::INTEGER
+            INTO v_required_players
+            FROM public.quiz_attempts
+            WHERE session_id = p_session_id;
+
+          END IF;
+
+          v_required_players :=
+            GREATEST(1, v_required_players);
+
+
+          -- Vẫn còn người chưa trả lời.
+          -- Tiếp tục đếm ngược bình thường.
+
+          IF v_answered < v_required_players THEN
+            EXIT;
+          END IF;
+
+
+          -- Tất cả đã trả lời.
+          -- Công bố ngay tại thời điểm server.
+
+          v_transition := v_now;
+
+        ELSE
+
+          -- Hết giờ bình thường.
+          -- Dùng deadline gốc để các thiết bị
+          -- có cùng mốc chuyển giai đoạn.
+
+          v_transition := v_deadline;
+
+        END IF;
+
+
+        -- ==================================
+        -- INTRO -> QUESTION
+        -- ==================================
+
+        IF v_s.live_phase = 'intro' THEN
+
+          UPDATE public.quiz_sessions
+          SET
+            live_phase = 'question',
+
+            phase_started_at = v_transition,
+
+            -- Chỉ bắt đầu tính giờ tại đây.
+            question_started_at = v_transition,
+
+            results_revealed = FALSE,
+            revealed_at = NULL
+
+          WHERE id = p_session_id
+          RETURNING * INTO v_s;
+
+
+        -- ==================================
+        -- QUESTION -> REVEAL
+        -- ==================================
+
+        ELSIF v_s.live_phase = 'question' THEN
+
+          UPDATE public.quiz_sessions
+          SET
+            live_phase = 'reveal',
+
+            phase_started_at = v_transition,
+
+            results_revealed = TRUE,
+            revealed_at = v_transition
+
+          WHERE id = p_session_id
+          RETURNING * INTO v_s;
+
+
+        -- ==================================
+        -- REVEAL -> LEADERBOARD
+        -- ==================================
+
+        ELSIF v_s.live_phase = 'reveal' THEN
+
+          UPDATE public.quiz_sessions
+          SET
+            live_phase = 'leaderboard',
+
+            phase_started_at = v_transition
+
+          WHERE id = p_session_id
+          RETURNING * INTO v_s;
+
+
+        -- ==================================
+        -- LEADERBOARD -> NEXT / FINISH
+        -- ==================================
+
+        ELSIF v_s.live_phase = 'leaderboard' THEN
+
+          IF v_s.current_question + 1 >= v_total THEN
+
+            UPDATE public.quiz_sessions
+            SET
+              status = 'finished',
+              live_phase = 'finished',
+
+              finished_at = v_transition,
+              phase_started_at = v_transition,
+
+              paused_at = NULL
+
+            WHERE id = p_session_id
+            RETURNING * INTO v_s;
+
+          ELSE
+
+            UPDATE public.quiz_sessions
+            SET
+              current_question =
+                current_question + 1,
+
+              live_phase = 'intro',
+
+              phase_started_at = v_transition,
+
+              -- Câu mới chưa bắt đầu tính giờ.
+              question_started_at = NULL,
+
+              results_revealed = FALSE,
+              revealed_at = NULL
+
+            WHERE id = p_session_id
+            RETURNING * INTO v_s;
+
+          END IF;
+
+        END IF;
+
+      END LOOP;
+
+    END IF;
+
+  END IF;
+
+
+  -- ========================================
+  -- RETURN TRẠNG THÁI MỚI
+  -- ========================================
+
+  RETURN jsonb_build_object(
+    'ok', TRUE,
+
+    'session_id', v_s.id,
+
+    'status', v_s.status,
+
+    'live_phase', v_s.live_phase,
+
+    'current_question',
+      v_s.current_question,
+
+    'total_questions', v_total,
+
+    'phase_started_at',
+      v_s.phase_started_at,
+
+    'question_started_at',
+      v_s.question_started_at,
+
+    'results_revealed',
+      v_s.results_revealed,
+
+    'server_now',
+      clock_timestamp()
+  );
+
+END;
+$function$
+"
+quiz_move_question,EXISTS,"p_quiz_id uuid, p_question_id uuid, p_direction text",false,false,false,true,ae0406b0a2b15705f6f726d4c05c9080,"CREATE OR REPLACE FUNCTION public.quiz_move_question(p_quiz_id uuid, p_question_id uuid, p_direction text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_ids UUID[];
+  v_count INTEGER;
+  v_current INTEGER;
+  v_target INTEGER;
+  v_temp UUID;
+BEGIN
+
+  -- Chỉ nhận lệnh lên hoặc xuống.
+  IF p_direction IS NULL
+     OR p_direction NOT IN ('up', 'down')
+  THEN
+    RAISE EXCEPTION 'Hướng di chuyển không hợp lệ.';
+  END IF;
+
+  -- Khóa bộ Quiz để các lệnh đổi thứ tự
+  -- không chạy chồng lên nhau.
+  PERFORM 1
+  FROM public.quizzes
+  WHERE id = p_quiz_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Không tìm thấy Quiz.';
+  END IF;
+
+  -- Không thay đổi bộ câu hỏi
+  -- đã có người tham gia.
+  IF EXISTS (
+    SELECT 1
+    FROM public.quiz_attempts
+    WHERE quiz_id = p_quiz_id
+  ) THEN
+    RAISE EXCEPTION
+      'Quiz đã có người tham gia, không thể đổi thứ tự.';
+  END IF;
+
+  -- Không thay đổi khi có phiên đang mở.
+  IF EXISTS (
+    SELECT 1
+    FROM public.quiz_sessions
+    WHERE quiz_id = p_quiz_id
+      AND status IN ('waiting', 'active', 'paused')
+  ) THEN
+    RAISE EXCEPTION
+      'Hãy đóng phiên Quiz đang mở trước.';
+  END IF;
+
+  -- Lấy danh sách theo thứ tự thực tế
+  -- giống cách Host và người chơi đọc.
+  SELECT ARRAY_AGG(id ORDER BY position ASC, id ASC)
+  INTO v_ids
+  FROM public.quiz_questions
+  WHERE quiz_id = p_quiz_id;
+
+  v_count := COALESCE(
+    ARRAY_LENGTH(v_ids, 1),
+    0
+  );
+
+  IF v_count > 1001 THEN
+    RAISE EXCEPTION
+      'Bộ Quiz vượt giới hạn thứ tự câu hỏi.';
+  END IF;
+
+  v_current := ARRAY_POSITION(
+    v_ids,
+    p_question_id
+  );
+
+  IF v_current IS NULL THEN
+    RAISE EXCEPTION
+      'Không tìm thấy câu hỏi trong Quiz.';
+  END IF;
+
+  -- Xác định vị trí mới.
+  IF p_direction = 'up' THEN
+    v_target := v_current - 1;
+  ELSE
+    v_target := v_current + 1;
+  END IF;
+
+  -- Đã ở đầu/cuối thì không cần đổi.
+  IF v_target < 1 OR v_target > v_count THEN
+    RETURN jsonb_build_object(
+      'ok', TRUE,
+      'moved', FALSE,
+      'position', v_current - 1
+    );
+  END IF;
+
+  -- Hoán đổi hai câu liền kề.
+  v_temp := v_ids[v_current];
+
+  v_ids[v_current] := v_ids[v_target];
+
+  v_ids[v_target] := v_temp;
+
+  -- Cập nhật toàn bộ position
+  -- bằng một câu SQL duy nhất.
+  -- Nếu lỗi, PostgreSQL rollback cả lệnh.
+  UPDATE public.quiz_questions AS q
+  SET position = ordered.ordinal::INTEGER - 1
+  FROM UNNEST(v_ids) WITH ORDINALITY
+    AS ordered(question_id, ordinal)
+  WHERE q.id = ordered.question_id
+    AND q.quiz_id = p_quiz_id;
+
+  RETURN jsonb_build_object(
+    'ok', TRUE,
+    'moved', TRUE,
+    'position', v_target - 1
+  );
+
+END;
+$function$
+"
+quiz_submit_answer,EXISTS,"p_attempt_id uuid, p_token_hash text, p_question_id uuid, p_selected_index integer",false,false,false,true,81a8258d14d744879e294a6b82701288,"CREATE OR REPLACE FUNCTION public.quiz_submit_answer(p_attempt_id uuid, p_token_hash text, p_question_id uuid, p_selected_index integer)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_a public.quiz_attempts%ROWTYPE;
+  v_s public.quiz_sessions%ROWTYPE;
+  v_q public.quiz_questions%ROWTYPE;
+
+  v_expected UUID;
+
+  v_received_at TIMESTAMPTZ;
+  v_elapsed NUMERIC;
+
+  v_correct BOOLEAN;
+  v_points INTEGER;
+
+  v_prior_answers INTEGER := 0;
+  v_player_total INTEGER := 1;
+  v_crowd_ratio NUMERIC := 0;
+
+  v_answered INTEGER;
+  v_total INTEGER;
+BEGIN
+
+  -- ========================================
+  -- XÁC THỰC NGƯỜI CHƠI
+  -- ========================================
+
+  SELECT *
+  INTO v_a
+  FROM public.quiz_attempts
+  WHERE id = p_attempt_id
+    AND player_token_hash = p_token_hash
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'invalid_player'
+    );
+  END IF;
+
+  IF v_a.status <> 'in_progress' THEN
+    RETURN jsonb_build_object(
+      'status', 'already_finished'
+    );
+  END IF;
+
+
+  -- Khóa đọc phiên để đồng bộ với Host.
+
+  SELECT *
+  INTO v_s
+  FROM public.quiz_sessions
+  WHERE id = v_a.session_id
+    AND quiz_id = v_a.quiz_id
+  FOR SHARE;
+
+  IF NOT FOUND OR v_s.status <> 'active' THEN
+    RETURN jsonb_build_object(
+      'status', 'not_active'
+    );
+  END IF;
+
+
+  -- Ghi thời điểm server nhận xử lý.
+  -- Không sử dụng thời gian từ điện thoại.
+
+  
+      v_received_at := COALESCE(
+        NULLIF(
+          pg_catalog.current_setting(
+            'joinly.quiz_received_at', true
+          ),
+          ''
+        )::timestamptz,
+        statement_timestamp()
+      );
+      
+
+
+  -- ========================================
+  -- KIỂM TRA CÂU HỎI VÀ ĐÁP ÁN
+  -- ========================================
+
+  SELECT *
+  INTO v_q
+  FROM public.quiz_questions
+  WHERE id = p_question_id
+    AND quiz_id = v_a.quiz_id;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'invalid_question'
+    );
+  END IF;
+
+  IF p_selected_index IS NULL
+     OR p_selected_index < 0
+     OR p_selected_index >=
+        jsonb_array_length(v_q.options)
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'invalid_choice'
+    );
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.quiz_answers
+    WHERE attempt_id = v_a.id
+      AND question_id = p_question_id
+  ) THEN
+    RETURN jsonb_build_object(
+      'status', 'already_answered'
+    );
+  END IF;
+
+
+  -- ========================================
+  -- LIVE QUIZ
+  -- ========================================
+
+  IF v_s.mode = 'live' THEN
+
+    SELECT id
+    INTO v_expected
+    FROM public.quiz_questions
+    WHERE quiz_id = v_a.quiz_id
+    ORDER BY position, id
+    OFFSET v_s.current_question
+    LIMIT 1;
+
+    IF v_expected IS DISTINCT
+       FROM p_question_id
+    THEN
+      RETURN jsonb_build_object(
+        'status', 'wrong_question'
+      );
+    END IF;
+
+    IF v_s.question_started_at IS NULL THEN
+      RETURN jsonb_build_object(
+        'status', 'not_started'
+      );
+    END IF;
+
+
+    -- Sau khi công bố đáp án thì khóa.
+
+    IF v_s.results_revealed
+       OR (
+         v_s.auto_play_enabled
+         AND v_s.live_phase <> 'question'
+       )
+    THEN
+      RETURN jsonb_build_object(
+        'status', 'time_up'
+      );
+    END IF;
+
+
+    v_elapsed := EXTRACT(
+      EPOCH FROM (
+        v_received_at - v_s.question_started_at
+      )
+    );
+
+    IF v_elapsed < 0 THEN
+      RETURN jsonb_build_object(
+        'status', 'not_started'
+      );
+    END IF;
+
+
+    -- Chỉ hết giờ mới khóa trả lời.
+    -- Số người đã trả lời không làm
+    -- câu hỏi kết thúc sớm.
+
+    IF v_elapsed >= v_q.time_limit_seconds THEN
+      RETURN jsonb_build_object(
+        'status', 'time_up'
+      );
+    END IF;
+
+
+  -- ========================================
+  -- SELF-PACED
+  -- ========================================
+
+  ELSIF v_s.mode = 'self_paced' THEN
+
+    SELECT q.id
+    INTO v_expected
+    FROM public.quiz_questions q
+    WHERE q.quiz_id = v_a.quiz_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.quiz_answers ans
+        WHERE ans.attempt_id = v_a.id
+          AND ans.question_id = q.id
+      )
+    ORDER BY q.position, q.id
+    LIMIT 1;
+
+    IF v_expected IS DISTINCT
+       FROM p_question_id
+    THEN
+      RETURN jsonb_build_object(
+        'status', 'wrong_question'
+      );
+    END IF;
+
+  ELSE
+    RETURN jsonb_build_object(
+      'status', 'invalid_mode'
+    );
+  END IF;
+
+
+  -- ========================================
+  -- ĐẾM NGƯỜI ĐÃ TRẢ LỜI TRƯỚC
+  -- ========================================
+
+  IF v_s.mode = 'live'
+     AND v_s.auto_play_enabled
+  THEN
+
+    -- Xếp tuần tự các lần nộp đáp án
+    -- cùng một câu, tránh đếm thiếu
+    -- khi nhiều người gửi đồng thời.
+
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        v_s.id::TEXT || ':' || v_q.id::TEXT,
+        0
+      )
+    );
+
+    SELECT COUNT(*)::INTEGER
+    INTO v_prior_answers
+    FROM public.quiz_answers ans
+    JOIN public.quiz_attempts a
+      ON a.id = ans.attempt_id
+    WHERE a.session_id = v_s.id
+      AND ans.question_id = v_q.id;
+
+    v_player_total := GREATEST(
+      1,
+      COALESCE(v_s.scoring_player_count, 1)
+    );
+
+    v_crowd_ratio := LEAST(
+      1,
+      v_prior_answers::NUMERIC / v_player_total
+    );
+
+  END IF;
+
+
+  -- ========================================
+  -- CÔNG THỨC CHẤM ĐIỂM
+  -- ========================================
+
+  v_correct :=
+    p_selected_index = v_q.correct_index;
+
+
+  IF NOT v_correct THEN
+
+    -- Sai luôn 0 điểm.
+
+    v_points := 0;
+
+
+  ELSIF v_s.mode = 'live'
+        AND v_s.auto_play_enabled
+        AND v_elapsed <= 0.5
+  THEN
+
+    -- Tất cả người trả lời đúng trong
+    -- 0,5 giây đầu đều nhận 1000 điểm.
+    -- Không phụ thuộc số người đã nộp.
+
+    v_points := 1000;
+
+  ELSIF v_s.mode = 'live'
+        AND v_s.auto_play_enabled
+  THEN
+
+    -- Live Auto Play:
+    -- Tối đa 1000 điểm.
+    -- Tối thiểu 200 điểm nếu đúng hạn.
+    --
+    -- Giảm theo thời gian còn lại và
+    -- số người đã trả lời trước.
+    --
+    -- Điểm = FLOOR(
+    --   1000
+    --   * (1 - elapsed / duration)
+    --   * (1 - 0.70 * crowd_ratio^2)
+    -- )
+    --
+    -- Giới hạn kết quả trong 200..1000.
+
+    v_points := LEAST(
+      1000,
+      GREATEST(
+        200,
+        FLOOR(
+          1000
+
+          * GREATEST(
+              0,
+              1 - GREATEST(0, v_elapsed - 0.5) / v_q.time_limit_seconds
+            )
+
+          * (
+              1 - 0.70 * POWER(v_crowd_ratio, 2)
+            )
+        )::INTEGER
+      )
+    );
+
+  ELSE
+
+    -- Self-paced và Live phiên cũ:
+    -- Giữ cách chấm điểm cũ.
+
+    v_points := v_q.points;
+
+  END IF;
+
+
+  -- ========================================
+  -- LƯU ĐÁP ÁN
+  -- ========================================
+
+  INSERT INTO public.quiz_answers (
+    quiz_id,
+    attempt_id,
+    question_id,
+    selected_index,
+    is_correct,
+    points_earned
+  )
+  VALUES (
+    v_a.quiz_id,
+    v_a.id,
+    p_question_id,
+    p_selected_index,
+    v_correct,
+    v_points
+  );
+
+
+  -- ========================================
+  -- CẬP NHẬT ĐIỂM NGƯỜI CHƠI
+  -- ========================================
+
+  UPDATE public.quiz_attempts
+  SET
+    score = score + v_points,
+    correct_count = correct_count
+      + CASE WHEN v_correct THEN 1 ELSE 0 END
+  WHERE id = v_a.id;
+
+
+  SELECT COUNT(*)::INTEGER
+  INTO v_answered
+  FROM public.quiz_answers
+  WHERE attempt_id = v_a.id;
+
+  SELECT COUNT(*)::INTEGER
+  INTO v_total
+  FROM public.quiz_questions
+  WHERE quiz_id = v_a.quiz_id;
+
+
+  -- Không tiết lộ đúng/sai hoặc điểm
+  -- trước khi công bố đáp án.
+
+  RETURN jsonb_build_object(
+    'status', 'ok',
+    'answered_count', v_answered,
+    'total_questions', v_total
+  );
+
+END;
+$function$
+"
+quiz_submit_answer_received,EXISTS,"p_attempt_id uuid, p_token_hash text, p_question_id uuid, p_selected_index integer, p_received_at timestamp with time zone",false,false,false,true,9068cdf95a703174bf1f76c9a4bd8b49,"CREATE OR REPLACE FUNCTION public.quiz_submit_answer_received(p_attempt_id uuid, p_token_hash text, p_question_id uuid, p_selected_index integer, p_received_at timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_a public.quiz_attempts%ROWTYPE;
+  v_s public.quiz_sessions%ROWTYPE;
+  v_q public.quiz_questions%ROWTYPE;
+
+  v_expected UUID;
+  v_elapsed NUMERIC;
+  v_correct BOOLEAN;
+  v_points INTEGER;
+
+  v_prior_answers INTEGER := 0;
+  v_player_total INTEGER := 1;
+  v_crowd_ratio NUMERIC := 0;
+
+  v_answered INTEGER;
+  v_total INTEGER;
+BEGIN
+
+  -- 1. Kiểm tra thời điểm nhận từ server.
+  -- Không lấy thời gian trực tiếp từ thiết bị người chơi.
+
+  IF p_received_at IS NULL
+     OR p_received_at > clock_timestamp() + INTERVAL '5 seconds'
+     OR p_received_at < clock_timestamp() - INTERVAL '90 seconds'
+  THEN
+    RETURN jsonb_build_object('status', 'invalid_time');
+  END IF;
+
+  -- 2. Xác thực người chơi và khóa attempt.
+  -- Ngăn hai request đồng thời cộng điểm hai lần.
+
+  SELECT *
+  INTO v_a
+  FROM public.quiz_attempts
+  WHERE id = p_attempt_id
+    AND player_token_hash = p_token_hash
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'invalid_player');
+  END IF;
+
+  IF v_a.status <> 'in_progress' THEN
+    RETURN jsonb_build_object('status', 'already_finished');
+  END IF;
+
+  -- 3. Kiểm tra phiên Quiz.
+
+  SELECT *
+  INTO v_s
+  FROM public.quiz_sessions
+  WHERE id = v_a.session_id
+    AND quiz_id = v_a.quiz_id
+  FOR SHARE;
+
+  IF NOT FOUND OR v_s.status <> 'active' THEN
+    RETURN jsonb_build_object('status', 'not_active');
+  END IF;
+
+  -- 4. Kiểm tra câu hỏi.
+
+  SELECT *
+  INTO v_q
+  FROM public.quiz_questions
+  WHERE id = p_question_id
+    AND quiz_id = v_a.quiz_id;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'invalid_question');
+  END IF;
+
+  IF p_selected_index IS NULL
+     OR p_selected_index < 0
+     OR p_selected_index >= jsonb_array_length(v_q.options)
+  THEN
+    RETURN jsonb_build_object('status', 'invalid_choice');
+  END IF;
+
+  -- Không cho trả lời cùng câu hai lần.
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.quiz_answers
+    WHERE attempt_id = v_a.id
+      AND question_id = p_question_id
+  ) THEN
+    RETURN jsonb_build_object('status', 'already_answered');
+  END IF;
+
+  -- 5. Kiểm tra tiến độ và thời gian.
+
+  IF v_s.mode = 'live' THEN
+
+    SELECT id
+    INTO v_expected
+    FROM public.quiz_questions
+    WHERE quiz_id = v_a.quiz_id
+    ORDER BY position, id
+    OFFSET v_s.current_question
+    LIMIT 1;
+
+    IF v_expected IS DISTINCT FROM p_question_id THEN
+      RETURN jsonb_build_object('status', 'wrong_question');
+    END IF;
+
+    IF v_s.question_started_at IS NULL THEN
+      RETURN jsonb_build_object('status', 'not_started');
+    END IF;
+
+    IF v_s.results_revealed
+       OR (
+         v_s.auto_play_enabled
+         AND v_s.live_phase <> 'question'
+       )
+    THEN
+      RETURN jsonb_build_object('status', 'time_up');
+    END IF;
+
+    -- Tính từ lúc SERVER mở câu hỏi
+    -- đến lúc SERVER nhận yêu cầu trả lời.
+
+    v_elapsed := EXTRACT(
+      EPOCH FROM (p_received_at - v_s.question_started_at)
+    );
+
+    IF v_elapsed < 0 THEN
+      RETURN jsonb_build_object('status', 'not_started');
+    END IF;
+
+    IF v_elapsed >= v_q.time_limit_seconds THEN
+      RETURN jsonb_build_object('status', 'time_up');
+    END IF;
+
+  ELSIF v_s.mode = 'self_paced' THEN
+
+    -- Mỗi người chơi có tiến độ riêng.
+
+    SELECT q.id
+    INTO v_expected
+    FROM public.quiz_questions q
+    WHERE q.quiz_id = v_a.quiz_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.quiz_answers ans
+        WHERE ans.attempt_id = v_a.id
+          AND ans.question_id = q.id
+      )
+    ORDER BY q.position, q.id
+    LIMIT 1;
+
+    IF v_expected IS DISTINCT FROM p_question_id THEN
+      RETURN jsonb_build_object('status', 'wrong_question');
+    END IF;
+
+  ELSE
+    RETURN jsonb_build_object('status', 'invalid_mode');
+  END IF;
+
+  -- 6. Đếm số người trả lời trước.
+  -- Giữ nguyên cơ chế tính điểm theo thứ tự.
+  -- Cửa sổ 0,5 giây không bị ảnh hưởng bởi số này.
+
+  IF v_s.mode = 'live'
+     AND v_s.auto_play_enabled
+  THEN
+
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        v_s.id::TEXT || ':' || v_q.id::TEXT,
+        0
+      )
+    );
+
+    SELECT COUNT(*)::INTEGER
+    INTO v_prior_answers
+    FROM public.quiz_answers ans
+    JOIN public.quiz_attempts a
+      ON a.id = ans.attempt_id
+    WHERE a.session_id = v_s.id
+      AND ans.question_id = v_q.id;
+
+    v_player_total := GREATEST(
+      1,
+      COALESCE(v_s.scoring_player_count, 1)
+    );
+
+    v_crowd_ratio := LEAST(
+      1,
+      v_prior_answers::NUMERIC / v_player_total
+    );
+
+  END IF;
+
+  -- 7. Chấm điểm.
+
+  v_correct := p_selected_index = v_q.correct_index;
+
+  IF NOT v_correct THEN
+
+    v_points := 0;
+
+  ELSIF v_s.mode = 'live'
+        AND v_s.auto_play_enabled
+        AND v_elapsed <= 0.5
+  THEN
+
+    -- Mọi đáp án đúng trong 0,5 giây đầu
+    -- đều nhận chính xác 1000 điểm.
+
+    v_points := 1000;
+
+  ELSIF v_s.mode = 'live'
+        AND v_s.auto_play_enabled
+  THEN
+
+    -- Sau 0,5 giây, điểm giảm theo:
+    -- 1. Thời gian trả lời
+    -- 2. Tỷ lệ người đã trả lời trước
+    -- Giới hạn 200 - 1000 điểm.
+
+    v_points := LEAST(
+      1000,
+      GREATEST(
+        200,
+        FLOOR(
+          1000
+          * GREATEST(
+              0,
+              1 - GREATEST(0, v_elapsed - 0.5)
+                  / v_q.time_limit_seconds
+            )
+          * (
+              1 - 0.70 * POWER(v_crowd_ratio, 2)
+            )
+        )::INTEGER
+      )
+    );
+
+  ELSE
+
+    -- Self-paced và Live không bật Auto Play:
+    -- giữ điểm được cấu hình trong câu hỏi.
+
+    v_points := v_q.points;
+
+  END IF;
+
+  -- 8. Lưu đáp án.
+
+  INSERT INTO public.quiz_answers (
+    quiz_id,
+    attempt_id,
+    question_id,
+    selected_index,
+    is_correct,
+    points_earned
+  )
+  VALUES (
+    v_a.quiz_id,
+    v_a.id,
+    p_question_id,
+    p_selected_index,
+    v_correct,
+    v_points
+  );
+
+  -- 9. Cập nhật tổng điểm.
+
+  UPDATE public.quiz_attempts
+  SET
+    score = score + v_points,
+    correct_count = correct_count
+      + CASE WHEN v_correct THEN 1 ELSE 0 END
+  WHERE id = v_a.id;
+
+  SELECT COUNT(*)::INTEGER
+  INTO v_answered
+  FROM public.quiz_answers
+  WHERE attempt_id = v_a.id;
+
+  SELECT COUNT(*)::INTEGER
+  INTO v_total
+  FROM public.quiz_questions
+  WHERE quiz_id = v_a.quiz_id;
+
+  -- Không tiết lộ đúng/sai và điểm trước Reveal.
+
+  RETURN jsonb_build_object(
+    'status', 'ok',
+    'answered_count', v_answered,
+    'total_questions', v_total
+  );
+
+END;
+$function$
+"
+reject_coowner_request,EXISTS,"_event_id uuid, _member_id uuid",true,false,true,true,5f28eea7ac4485e181b1096c1a3ce662,"CREATE OR REPLACE FUNCTION public.reject_coowner_request(_event_id uuid, _member_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  current_user_id uuid;
+  owner_id uuid;
+  target_member public.event_members%ROWTYPE;
+BEGIN
+  current_user_id := auth.uid();
+
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'Bạn chưa đăng nhập.';
+  END IF;
+
+  SELECT organizer_id
+  INTO owner_id
+  FROM public.events
+  WHERE id = _event_id;
+
+  IF owner_id IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy sự kiện.';
+  END IF;
+
+  IF current_user_id <> owner_id THEN
+    RAISE EXCEPTION 'Chỉ Owner mới được từ chối Co-owner.';
+  END IF;
+
+  SELECT *
+  INTO target_member
+  FROM public.event_members
+  WHERE id = _member_id
+    AND event_id = _event_id
+  LIMIT 1;
+
+  IF target_member.id IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy lời mời.';
+  END IF;
+
+  IF target_member.role <> 'co_owner' THEN
+    RAISE EXCEPTION 'Thành viên này không phải Co-owner.';
+  END IF;
+
+  IF target_member.status <> 'pending' THEN
+    RAISE EXCEPTION 'Lời mời này không ở trạng thái chờ duyệt.';
+  END IF;
+
+  UPDATE public.event_members
+  SET
+    status = 'rejected',
+    updated_at = now()
+  WHERE id = _member_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'status', 'rejected'
+  );
+END;
+$function$
+"
+remove_event_member,EXISTS,"_event_id uuid, _member_id uuid",true,false,true,true,7d135af4f75825cef393406e81a990f2,"CREATE OR REPLACE FUNCTION public.remove_event_member(_event_id uuid, _member_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  current_user_id uuid;
+  v_current_role text;
+  target_member public.event_members%ROWTYPE;
+BEGIN
+  current_user_id := auth.uid();
+
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'Bạn chưa đăng nhập.';
+  END IF;
+
+  v_current_role := public.get_event_role(_event_id);
+
+  -- Chỉ Owner và Co-owner được xóa thành viên
+  IF v_current_role IS NULL
+     OR v_current_role NOT IN ('owner', 'co_owner') THEN
+    RAISE EXCEPTION 'Bạn không có quyền xóa thành viên.';
+  END IF;
+
+  -- Kiểm tra và khóa thành viên đích
+  SELECT *
+  INTO target_member
+  FROM public.event_members
+  WHERE id = _member_id
+    AND event_id = _event_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Không tìm thấy thành viên.';
+  END IF;
+
+  -- Không cho xóa Owner hoặc vai trò không hợp lệ
+  IF target_member.role IS NULL
+     OR target_member.role NOT IN ('manager', 'co_owner') THEN
+    RAISE EXCEPTION 'Không được xóa thành viên này.';
+  END IF;
+
+  -- Co-owner chỉ được xóa Manager
+  IF v_current_role = 'co_owner'
+     AND target_member.role <> 'manager' THEN
+    RAISE EXCEPTION 'Co-owner chỉ được xóa Manager.';
+  END IF;
+
+  DELETE FROM public.event_members
+  WHERE id = _member_id
+    AND event_id = _event_id;
+
+  RETURN jsonb_build_object('success', true);
+END;
+$function$
+"
+replace_pending_payment,EXISTS,"p_event_id uuid, p_user_id uuid, p_plan_code text, p_order_code text, p_expires_at timestamp with time zone",true,false,false,true,4785ec5be37f5521b8e94c37ea69b26c,"CREATE OR REPLACE FUNCTION public.replace_pending_payment(p_event_id uuid, p_user_id uuid, p_plan_code text, p_order_code text, p_expires_at timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_event record;
+  v_amount integer;
+  v_payment public.payments%ROWTYPE;
+BEGIN
+  -- Khóa sự kiện để chống tạo đồng thời
+  SELECT organizer_id, lifecycle_status, requested_plan_code
+  INTO v_event
+  FROM public.events
+  WHERE id = p_event_id
+  FOR UPDATE;
+
+  IF NOT FOUND
+     OR v_event.organizer_id IS DISTINCT FROM p_user_id
+     OR v_event.lifecycle_status <> 'draft'
+     OR v_event.requested_plan_code IS DISTINCT FROM p_plan_code
+  THEN
+    RAISE EXCEPTION 'Bản nháp không hợp lệ hoặc không có quyền.';
+  END IF;
+
+  IF p_order_code !~ '^JN[0-9]{10}$'
+     OR p_expires_at <= now()
+  THEN
+    RAISE EXCEPTION 'Mã hoặc thời hạn thanh toán không hợp lệ.';
+  END IF;
+
+  SELECT price_vnd
+  INTO v_amount
+  FROM public.billing_plans
+  WHERE code = p_plan_code
+    AND billing_type = 'event'
+    AND is_active = true;
+
+  IF v_amount IS NULL OR v_amount <= 0 THEN
+    RAISE EXCEPTION 'Gói thanh toán không hợp lệ.';
+  END IF;
+
+  -- Không tạo đơn mới nếu đã ghi nhận thanh toán
+  IF EXISTS (
+    SELECT 1 FROM public.payments
+    WHERE event_id = p_event_id
+      AND (
+        status = 'paid'
+        OR paid_at IS NOT NULL
+        OR sepay_transaction_id IS NOT NULL
+      )
+  ) THEN
+    RAISE EXCEPTION 'Sự kiện đã có giao dịch cần xử lý.';
+  END IF;
+
+  -- Ngừng sử dụng các mã pending cũ
+  UPDATE public.payments
+  SET status = 'expired'
+  WHERE event_id = p_event_id
+    AND status = 'pending';
+
+  -- Tạo đơn mới, giữ nguyên lịch sử đơn cũ
+  INSERT INTO public.payments (
+    user_id, event_id, plan_code,
+    order_code, amount_vnd, status, expires_at
+  )
+  VALUES (
+    p_user_id, p_event_id, p_plan_code,
+    p_order_code, v_amount, 'pending', p_expires_at
+  )
+  RETURNING * INTO v_payment;
+
+  RETURN jsonb_build_object(
+    'id', v_payment.id,
+    'order_code', v_payment.order_code,
+    'amount_vnd', v_payment.amount_vnd,
+    'plan_code', v_payment.plan_code,
+    'event_id', v_payment.event_id,
+    'status', v_payment.status,
+    'expires_at', v_payment.expires_at
+  );
+END;
+$function$
+"
+submit_feedback_response,EXISTS,"p_form_id uuid, p_email text, p_answers jsonb",true,false,false,true,17dd6eff1e91fc964e4d9b9dfcb9fb42,"CREATE OR REPLACE FUNCTION public.submit_feedback_response(p_form_id uuid, p_email text, p_answers jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_event_id UUID;
+  v_status TEXT;
+  v_email TEXT;
+  v_participant_id UUID;
+  v_submission_id UUID;
+
+  v_item JSONB;
+  v_value JSONB;
+  v_question public.feedback_questions%ROWTYPE;
+  v_question_id UUID;
+  v_question_id_text TEXT;
+
+  v_seen UUID[] := ARRAY[]::UUID[];
+  v_count INTEGER;
+  v_distinct_count INTEGER;
+  v_missing_required BOOLEAN;
+BEGIN
+
+  -- 1. KIỂM TRA BIỂU MẪU
+  SELECT f.event_id, f.status
+  INTO v_event_id, v_status
+  FROM public.feedback_forms f
+  WHERE f.id = p_form_id
+  FOR SHARE;
+
+  IF v_event_id IS NULL OR v_status <> 'open' THEN
+    RETURN jsonb_build_object('status', 'closed');
+  END IF;
+
+  -- 2. CHUẨN HÓA EMAIL
+  v_email := lower(btrim(p_email));
+
+  IF v_email IS NULL
+     OR length(v_email) NOT BETWEEN 3 AND 320 THEN
+    RETURN jsonb_build_object('status', 'not_registered');
+  END IF;
+
+  -- 3. XÁC NHẬN THAM GIA ĐÚNG SỰ KIỆN
+  SELECT p.id
+  INTO v_participant_id
+  FROM public.participants p
+  WHERE p.event_id = v_event_id
+    AND lower(btrim(p.email)) = v_email
+  ORDER BY p.created_at, p.id
+  LIMIT 1;
+
+  IF v_participant_id IS NULL THEN
+    RETURN jsonb_build_object('status', 'not_registered');
+  END IF;
+
+  -- 4. KIỂM TRA ĐÃ GỬI CHƯA
+  IF EXISTS (
+    SELECT 1
+    FROM public.feedback_submissions s
+    WHERE s.form_id = p_form_id
+      AND s.email_normalized = v_email
+  ) THEN
+    RETURN jsonb_build_object('status', 'already_submitted');
+  END IF;
+
+  -- 5. KIỂM TRA DANH SÁCH CÂU TRẢ LỜI
+  IF jsonb_typeof(p_answers) IS DISTINCT FROM 'array' THEN
+    RETURN jsonb_build_object('status', 'invalid_answers');
+  END IF;
+
+  IF jsonb_array_length(p_answers) NOT BETWEEN 1 AND 100 THEN
+    RETURN jsonb_build_object('status', 'invalid_answers');
+  END IF;
+
+  -- 6. KIỂM TRA TỪNG CÂU TRẢ LỜI
+  FOR v_item IN
+    SELECT value
+    FROM jsonb_array_elements(p_answers)
+  LOOP
+
+    IF jsonb_typeof(v_item) IS DISTINCT FROM 'object' THEN
+      RETURN jsonb_build_object('status', 'invalid_answers');
+    END IF;
+
+    v_question_id_text := v_item ->> 'question_id';
+    v_value := v_item -> 'value';
+
+    IF v_question_id_text IS NULL
+       OR v_question_id_text !~*
+          '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       OR NOT (v_item ? 'value') THEN
+      RETURN jsonb_build_object('status', 'invalid_answers');
+    END IF;
+
+    v_question_id := v_question_id_text::UUID;
+
+    -- Không cho trả lời trùng câu hỏi
+    IF v_question_id = ANY(v_seen) THEN
+      RETURN jsonb_build_object('status', 'invalid_answers');
+    END IF;
+
+    v_seen := array_append(v_seen, v_question_id);
+
+    -- Chỉ nhận câu hỏi thuộc đúng form
+    SELECT q.*
+    INTO v_question
+    FROM public.feedback_questions q
+    WHERE q.id = v_question_id
+      AND q.form_id = p_form_id
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object('status', 'invalid_answers');
+    END IF;
+
+    -- ĐÁNH GIÁ 1-5 SAO
+    IF v_question.question_type = 'rating' THEN
+
+      IF jsonb_typeof(v_value) IS DISTINCT FROM 'number'
+         OR v_value::TEXT NOT IN ('1', '2', '3', '4', '5') THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+    -- CÂU TRẢ LỜI NGẮN
+    ELSIF v_question.question_type = 'short_text' THEN
+
+      IF jsonb_typeof(v_value) IS DISTINCT FROM 'string' THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+      IF length(btrim(v_value #>> '{}')) NOT BETWEEN 1 AND 500 THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+    -- CÂU TRẢ LỜI DÀI
+    ELSIF v_question.question_type = 'long_text' THEN
+
+      IF jsonb_typeof(v_value) IS DISTINCT FROM 'string' THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+      IF length(btrim(v_value #>> '{}')) NOT BETWEEN 1 AND 2000 THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+    -- MỘT LỰA CHỌN
+    ELSIF v_question.question_type = 'single_choice' THEN
+
+      IF jsonb_typeof(v_value) IS DISTINCT FROM 'string' THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+      IF NOT (
+        v_question.options @> jsonb_build_array(v_value)
+      ) THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+    -- NHIỀU LỰA CHỌN
+    ELSIF v_question.question_type = 'multi_choice' THEN
+
+      IF jsonb_typeof(v_value) IS DISTINCT FROM 'array' THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+      v_count := jsonb_array_length(v_value);
+
+      IF v_count NOT BETWEEN 1 AND 30 THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+      -- Giới hạn Checkbox của BTC
+      IF v_question.max_choices IS NOT NULL
+         AND v_count > v_question.max_choices THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+      -- Chỉ nhận các phương án có sẵn
+      IF NOT (v_question.options @> v_value) THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+      -- Từng phần tử phải là chuỗi
+      IF EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(v_value) AS a(value)
+        WHERE jsonb_typeof(a.value) <> 'string'
+      ) THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+      -- Không chấp nhận đáp án trùng nhau
+      SELECT
+        count(*),
+        count(DISTINCT a.value)
+      INTO v_count, v_distinct_count
+      FROM jsonb_array_elements(v_value) AS a(value);
+
+      IF v_count <> v_distinct_count THEN
+        RETURN jsonb_build_object('status', 'invalid_answers');
+      END IF;
+
+    ELSE
+      RETURN jsonb_build_object('status', 'invalid_answers');
+    END IF;
+
+  END LOOP;
+
+  -- 7. KIỂM TRA CÂU HỎI BẮT BUỘC
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.feedback_questions q
+    WHERE q.form_id = p_form_id
+      AND q.is_required = true
+      AND NOT (q.id = ANY(v_seen))
+  )
+  INTO v_missing_required;
+
+  IF v_missing_required THEN
+    RETURN jsonb_build_object('status', 'invalid_answers');
+  END IF;
+
+  -- 8. TẠO LƯỢT GỬI
+  -- Unique constraint xử lý cả trường hợp gửi đồng thời
+  INSERT INTO public.feedback_submissions (
+    form_id,
+    participant_id,
+    email_normalized
+  )
+  VALUES (
+    p_form_id,
+    v_participant_id,
+    v_email
+  )
+  ON CONFLICT (form_id, email_normalized) DO NOTHING
+  RETURNING id INTO v_submission_id;
+
+  IF v_submission_id IS NULL THEN
+    RETURN jsonb_build_object('status', 'already_submitted');
+  END IF;
+
+  -- 9. LƯU TẤT CẢ CÂU TRẢ LỜI
+  FOR v_item IN
+    SELECT value
+    FROM jsonb_array_elements(p_answers)
+  LOOP
+
+    INSERT INTO public.feedback_answers (
+      form_id,
+      submission_id,
+      question_id,
+      answer
+    )
+    VALUES (
+      p_form_id,
+      v_submission_id,
+      (v_item ->> 'question_id')::UUID,
+      v_item -> 'value'
+    );
+
+  END LOOP;
+
+  RETURN jsonb_build_object('status', 'ok');
+
+END;
+$function$
+"
+submit_joinly_app_review,EXISTS,"p_token_hash text, p_rating smallint, p_comment text",true,false,false,true,6b53c3238437ab5351a5b7d3bfd3ef33,"CREATE OR REPLACE FUNCTION public.submit_joinly_app_review(p_token_hash text, p_rating smallint, p_comment text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_submission_id UUID;
+  v_email TEXT;
+  v_comment TEXT;
+  v_review_id UUID;
+BEGIN
+
+  -- KIỂM TRA TOKEN
+
+  IF p_token_hash IS NULL
+     OR p_token_hash !~ '^[0-9a-f]{64}$' THEN
+
+    RETURN jsonb_build_object(
+      'status', 'unavailable'
+    );
+  END IF;
+
+  -- KIỂM TRA SỐ SAO
+
+  IF p_rating IS NULL
+     OR p_rating NOT BETWEEN 1 AND 5 THEN
+
+    RETURN jsonb_build_object(
+      'status', 'invalid_rating'
+    );
+  END IF;
+
+  -- KIỂM TRA NHẬN XÉT
+
+  IF p_comment IS NOT NULL
+     AND length(btrim(p_comment)) NOT BETWEEN 1 AND 1000 THEN
+
+    RETURN jsonb_build_object(
+      'status', 'invalid_comment'
+    );
+  END IF;
+
+  v_comment := NULLIF(btrim(p_comment), '');
+
+  -- TÌM LỜI MỜI CÒN HIỆU LỰC
+  -- KHÓA DÒNG ĐỂ TRÁNH GỬI ĐỒNG THỜI
+
+  SELECT
+    i.submission_id,
+    s.email_normalized
+  INTO
+    v_submission_id,
+    v_email
+
+  FROM public.joinly_app_review_invites i
+
+  JOIN public.feedback_submissions s
+    ON s.id = i.submission_id
+
+  WHERE i.token_hash = p_token_hash
+    AND i.expires_at > now()
+
+  FOR UPDATE OF i;
+
+  IF NOT FOUND THEN
+
+    RETURN jsonb_build_object(
+      'status', 'unavailable'
+    );
+
+  END IF;
+
+  -- MỖI EMAIL CHỈ ĐƯỢC ĐÁNH GIÁ JOINLY MỘT LẦN
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.joinly_app_reviews r
+    WHERE r.email_normalized = v_email
+       OR r.source_submission_id = v_submission_id
+  ) THEN
+
+    RETURN jsonb_build_object(
+      'status', 'already_reviewed'
+    );
+
+  END IF;
+
+  -- LƯU ĐÁNH GIÁ
+
+  INSERT INTO public.joinly_app_reviews (
+    email_normalized,
+    source_submission_id,
+    rating,
+    comment
+  )
+  VALUES (
+    v_email,
+    v_submission_id,
+    p_rating,
+    v_comment
+  )
+
+  ON CONFLICT DO NOTHING
+
+  RETURNING id INTO v_review_id;
+
+  -- CHỐNG GỬI TRÙNG KHI HAI YÊU CẦU ĐỒNG THỜI
+
+  IF v_review_id IS NULL THEN
+
+    RETURN jsonb_build_object(
+      'status', 'already_reviewed'
+    );
+
+  END IF;
+
+  -- XÓA TOKEN SAU KHI DÙNG THÀNH CÔNG
+
+  DELETE FROM public.joinly_app_review_invites
+  WHERE submission_id = v_submission_id;
+
+  RETURN jsonb_build_object(
+    'status', 'ok'
+  );
+
+END;
+$function$
+"
+update_event_allowlist_settings,EXISTS,"_event_id uuid, _enabled boolean, _scope text",true,false,true,true,df1136cbf4b7f0ea8beb72bdc57b12e5,"CREATE OR REPLACE FUNCTION public.update_event_allowlist_settings(_event_id uuid, _enabled boolean DEFAULT NULL::boolean, _scope text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_role text;
+BEGIN
+  v_role := public.get_event_role(_event_id);
+
+  IF v_role IS NULL
+     OR v_role NOT IN ('owner', 'co_owner', 'manager') THEN
+    RAISE EXCEPTION 'Bạn không có quyền quản lý Allow-list.';
+  END IF;
+
+  IF _scope IS NOT NULL
+     AND _scope NOT IN ('event', 'room') THEN
+    RAISE EXCEPTION 'Phạm vi Allow-list không hợp lệ.';
+  END IF;
+
+  UPDATE public.events
+  SET
+    allowlist_enabled =
+      COALESCE(_enabled, allowlist_enabled),
+
+    allowlist_scope =
+      COALESCE(_scope, allowlist_scope)
+
+  WHERE id = _event_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Không tìm thấy sự kiện.';
+  END IF;
+
+  RETURN jsonb_build_object(
+    'success', true
+  );
+END;
+$function$
+"

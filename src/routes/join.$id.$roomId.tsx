@@ -5,7 +5,7 @@ import { Sparkles, Calendar, MapPin, Loader2, DoorOpen, Lock, ArrowRight } from 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { getPublicRoomLanding } from "@/lib/public-room.functions";
 import { toast } from "sonner";
 import { getJoined, setJoined } from "@/lib/joined-events";
 import { registerParticipant, checkRegistrationSlots } from "@/lib/confirmation.functions";
@@ -34,6 +34,8 @@ function JoinRoomPage() {
   const checkSlots = useServerFn(checkRegistrationSlots);
   const [checkingSlots, setCheckingSlots] = useState(false);
   const verifyCode = useServerFn(verifyRoomAccessCode);
+  const loadPublicRoom = useServerFn(getPublicRoomLanding);
+  const [roomError, setRoomError] = useState<"invalid" | "not_active" | "ended" | "network" | null>(null);
   const [event, setEvent] = useState<EventRow | null>(null);
   const [room, setRoom] = useState<RoomRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,26 +58,31 @@ function JoinRoomPage() {
       navigate({ to: "/join/$id", params: { id }, replace: true });
       return;
     }
+    let cancelled = false;
     (async () => {
-      const [{ data: ev }, { data: rm }] = await Promise.all([
-        supabase
-          .from("events")
-          .select("id, name, description, location, starts_at")
-          .eq("id", id)
-          .maybeSingle(),
-        (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> })
-          .from("event_rooms_public")
-          .select("id, name, event_id, has_access_code")
-          .eq("id", roomId)
-          .maybeSingle(),
-      ]);
-      setEvent(ev as EventRow | null);
-      const roomRow = rm as RoomRow | null;
-      setRoom(roomRow);
-      setStep(roomRow?.has_access_code ? "code" : "confirm");
-      setLoading(false);
+      try {
+        const result = await loadPublicRoom({ data: { eventId: id, roomId } });
+        if (cancelled) return;
+        if (result.status === "ok") {
+          setEvent(result.event);
+          setRoom(result.room);
+          setRoomError(null);
+          setStep(result.room.has_access_code ? "code" : "confirm");
+        } else {
+          setEvent(null);
+          setRoom(null);
+          setRoomError(result.status);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Cannot load QR room landing", error);
+        setRoomError("network");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
-  }, [id, roomId, navigate]);
+    return () => { cancelled = true; };
+  }, [id, roomId, navigate, loadPublicRoom]);
 
   const onVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,13 +245,25 @@ function JoinRoomPage() {
     );
   }
   if (!event || !room || room.event_id !== id) {
+    const heading = roomError === "not_active"
+      ? "Sự kiện chưa mở đăng ký"
+      : roomError === "ended"
+        ? "Sự kiện đã kết thúc"
+        : roomError === "network"
+          ? "Không thể tải thông tin phòng"
+          : "Không tìm thấy phòng";
+    const message = roomError === "not_active"
+      ? "Sự kiện chưa được kích hoạt hoặc thanh toán chưa hoàn tất. Vui lòng liên hệ ban tổ chức."
+      : roomError === "ended"
+        ? "Sự kiện này đã kết thúc và không nhận đăng ký mới."
+        : roomError === "network"
+          ? "Có lỗi kết nối khi kiểm tra phòng. Vui lòng tải lại trang."
+          : "Mã QR không đúng sự kiện hoặc phòng đã bị xóa. Vui lòng xin mã mới từ ban tổ chức.";
     return (
       <div className="flex min-h-screen items-center justify-center bg-secondary/40 px-4 text-center">
         <div>
-          <h1 className="font-display text-2xl font-bold">Không tìm thấy phòng</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Mã QR có thể đã hết hạn hoặc liên kết không hợp lệ.
-          </p>
+          <h1 className="font-display text-2xl font-bold">{heading}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         </div>
       </div>
     );

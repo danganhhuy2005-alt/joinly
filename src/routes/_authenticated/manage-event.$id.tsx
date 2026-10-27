@@ -1065,7 +1065,7 @@ function ManageEvent() {
                   type="button"
                   disabled={creatingPayment}
                   onClick={() => void buyPlan("standard")}
-                  className="rounded-xl border border-primary bg-primary/5 p-4 text-left transition hover:bg-primary/10"
+                  className="rounded-xl border border-border p-4 text-left transition hover:border-primary hover:bg-secondary/50"
                 >
                   <p className="font-semibold">Standard</p>
 

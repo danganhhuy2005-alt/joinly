@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
-import { Check, LogOut, User, Crown, CalendarCog, Ticket, Compass } from "lucide-react";
+import { Check, LogOut, User, Crown, CalendarCog, Ticket, Compass, Star, Bug, ShieldCheck } from "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
 
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 import { clearAuthSessionStartedAt } from "@/lib/auth-session";
 import { getWorkspaceMode, setWorkspaceMode, workspaceHome, type WorkspaceMode } from "@/lib/workspace-mode";
+import { isPlatformAdmin } from "@/lib/platform-support";
 
 export function AuthenticatedHeader() {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export function AuthenticatedHeader() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [accountId, setAccountId] = useState("");
   const [workspace, setWorkspace] = useState<WorkspaceMode>("organizer");
+  const [platformAdmin, setPlatformAdmin] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +46,7 @@ export function AuthenticatedHeader() {
 
       setAccountId(user.id);
       setWorkspace(getWorkspaceMode(user.id));
+      void isPlatformAdmin(user.id).then(allowed => { if (!cancelled) setPlatformAdmin(allowed); });
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -206,6 +209,22 @@ export function AuthenticatedHeader() {
                 <span className="flex-1">Người tham gia</span>
                 {workspace === "participant" && <Check className="h-4 w-4 text-primary" />}
               </DropdownMenuItem>
+
+              {workspace === "organizer" && (
+                <>
+                  <DropdownMenuSeparator />
+                  <div className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hỗ trợ Joinly</div>
+                  <DropdownMenuItem className="cursor-pointer rounded-xl px-3 py-3" onSelect={() => void navigate({ to: "/platform-review" })}>
+                    <Star className="mr-2 h-4 w-4" /> Đánh giá website
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer rounded-xl px-3 py-3" onSelect={() => void navigate({ to: "/platform-report-bug" })}>
+                    <Bug className="mr-2 h-4 w-4" /> Báo lỗi website
+                  </DropdownMenuItem>
+                  {platformAdmin && <DropdownMenuItem className="cursor-pointer rounded-xl px-3 py-3" onSelect={() => void navigate({ to: "/platform-support-admin" })}>
+                    <ShieldCheck className="mr-2 h-4 w-4" /> Quản trị phản hồi
+                  </DropdownMenuItem>}
+                </>
+              )}
 
               <DropdownMenuSeparator />
 

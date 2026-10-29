@@ -20,6 +20,9 @@ import { Route as AuthenticatedMonthlyCheckoutRouteImport } from './routes/_auth
 import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
 import { Route as AuthenticatedMyParticipationsRouteImport } from './routes/_authenticated/my-participations'
 import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/plans'
+import { Route as AuthenticatedPlatformReportBugRouteImport } from './routes/_authenticated/platform-report-bug'
+import { Route as AuthenticatedPlatformReviewRouteImport } from './routes/_authenticated/platform-review'
+import { Route as AuthenticatedPlatformSupportAdminRouteImport } from './routes/_authenticated/platform-support-admin'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as FeedbackFormIdRouteImport } from './routes/feedback.$formId'
 import { Route as JoinIdRouteImport } from './routes/join.$id'
@@ -99,6 +102,24 @@ const AuthenticatedPlansRoute = AuthenticatedPlansRouteImport.update({
   path: '/plans',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPlatformReportBugRoute =
+  AuthenticatedPlatformReportBugRouteImport.update({
+    id: '/platform-report-bug',
+    path: '/platform-report-bug',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlatformReviewRoute =
+  AuthenticatedPlatformReviewRouteImport.update({
+    id: '/platform-review',
+    path: '/platform-review',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlatformSupportAdminRoute =
+  AuthenticatedPlatformSupportAdminRouteImport.update({
+    id: '/platform-support-admin',
+    path: '/platform-support-admin',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -226,6 +247,9 @@ export interface FileRoutesByFullPath {
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/my-participations': typeof AuthenticatedMyParticipationsRoute
   '/plans': typeof AuthenticatedPlansRoute
+  '/platform-report-bug': typeof AuthenticatedPlatformReportBugRoute
+  '/platform-review': typeof AuthenticatedPlatformReviewRoute
+  '/platform-support-admin': typeof AuthenticatedPlatformSupportAdminRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/feedback/$formId': typeof FeedbackFormIdRoute
   '/join/$id': typeof JoinIdRouteWithChildren
@@ -259,6 +283,9 @@ export interface FileRoutesByTo {
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/my-participations': typeof AuthenticatedMyParticipationsRoute
   '/plans': typeof AuthenticatedPlansRoute
+  '/platform-report-bug': typeof AuthenticatedPlatformReportBugRoute
+  '/platform-review': typeof AuthenticatedPlatformReviewRoute
+  '/platform-support-admin': typeof AuthenticatedPlatformSupportAdminRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/feedback/$formId': typeof FeedbackFormIdRoute
   '/qna/$eventId': typeof QnaEventIdRoute
@@ -293,6 +320,9 @@ export interface FileRoutesById {
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
   '/_authenticated/my-participations': typeof AuthenticatedMyParticipationsRoute
   '/_authenticated/plans': typeof AuthenticatedPlansRoute
+  '/_authenticated/platform-report-bug': typeof AuthenticatedPlatformReportBugRoute
+  '/_authenticated/platform-review': typeof AuthenticatedPlatformReviewRoute
+  '/_authenticated/platform-support-admin': typeof AuthenticatedPlatformSupportAdminRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/feedback/$formId': typeof FeedbackFormIdRoute
   '/join/$id': typeof JoinIdRouteWithChildren
@@ -328,6 +358,9 @@ export interface FileRouteTypes {
     | '/my-events'
     | '/my-participations'
     | '/plans'
+    | '/platform-report-bug'
+    | '/platform-review'
+    | '/platform-support-admin'
     | '/profile'
     | '/feedback/$formId'
     | '/join/$id'
@@ -361,6 +394,9 @@ export interface FileRouteTypes {
     | '/my-events'
     | '/my-participations'
     | '/plans'
+    | '/platform-report-bug'
+    | '/platform-review'
+    | '/platform-support-admin'
     | '/profile'
     | '/feedback/$formId'
     | '/qna/$eventId'
@@ -394,6 +430,9 @@ export interface FileRouteTypes {
     | '/_authenticated/my-events'
     | '/_authenticated/my-participations'
     | '/_authenticated/plans'
+    | '/_authenticated/platform-report-bug'
+    | '/_authenticated/platform-review'
+    | '/_authenticated/platform-support-admin'
     | '/_authenticated/profile'
     | '/feedback/$formId'
     | '/join/$id'
@@ -507,6 +546,27 @@ declare module '@tanstack/react-router' {
       path: '/plans'
       fullPath: '/plans'
       preLoaderRoute: typeof AuthenticatedPlansRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/platform-report-bug': {
+      id: '/_authenticated/platform-report-bug'
+      path: '/platform-report-bug'
+      fullPath: '/platform-report-bug'
+      preLoaderRoute: typeof AuthenticatedPlatformReportBugRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/platform-review': {
+      id: '/_authenticated/platform-review'
+      path: '/platform-review'
+      fullPath: '/platform-review'
+      preLoaderRoute: typeof AuthenticatedPlatformReviewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/platform-support-admin': {
+      id: '/_authenticated/platform-support-admin'
+      path: '/platform-support-admin'
+      fullPath: '/platform-support-admin'
+      preLoaderRoute: typeof AuthenticatedPlatformSupportAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/profile': {
@@ -666,6 +726,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedMyEventsRoute: typeof AuthenticatedMyEventsRoute
   AuthenticatedMyParticipationsRoute: typeof AuthenticatedMyParticipationsRoute
   AuthenticatedPlansRoute: typeof AuthenticatedPlansRoute
+  AuthenticatedPlatformReportBugRoute: typeof AuthenticatedPlatformReportBugRoute
+  AuthenticatedPlatformReviewRoute: typeof AuthenticatedPlatformReviewRoute
+  AuthenticatedPlatformSupportAdminRoute: typeof AuthenticatedPlatformSupportAdminRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedCheckInIdRoute: typeof AuthenticatedCheckInIdRoute
   AuthenticatedDashboardIdRoute: typeof AuthenticatedDashboardIdRoute
@@ -688,6 +751,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedMyEventsRoute: AuthenticatedMyEventsRoute,
   AuthenticatedMyParticipationsRoute: AuthenticatedMyParticipationsRoute,
   AuthenticatedPlansRoute: AuthenticatedPlansRoute,
+  AuthenticatedPlatformReportBugRoute: AuthenticatedPlatformReportBugRoute,
+  AuthenticatedPlatformReviewRoute: AuthenticatedPlatformReviewRoute,
+  AuthenticatedPlatformSupportAdminRoute:
+    AuthenticatedPlatformSupportAdminRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedCheckInIdRoute: AuthenticatedCheckInIdRoute,
   AuthenticatedDashboardIdRoute: AuthenticatedDashboardIdRoute,

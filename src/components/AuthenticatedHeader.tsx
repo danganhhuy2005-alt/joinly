@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
-import { Check, LogOut, User, Crown, CalendarCog, Ticket, Compass, Star, Bug, ShieldCheck } from "lucide-react";
+import { Check, LogOut, User, Crown, CalendarCog, Ticket, Compass, Star, Bug, ShieldCheck, WalletCards } from "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
 
 import { toast } from "sonner";
@@ -222,6 +222,9 @@ export function AuthenticatedHeader() {
                   </DropdownMenuItem>
                   {platformAdmin && <DropdownMenuItem className="cursor-pointer rounded-xl px-3 py-3" onSelect={() => void navigate({ to: "/platform-support-admin" })}>
                     <ShieldCheck className="mr-2 h-4 w-4" /> Quản trị phản hồi
+                  </DropdownMenuItem>}
+                  {platformAdmin && <DropdownMenuItem className="cursor-pointer rounded-xl px-3 py-3" onSelect={() => void navigate({ to: "/platform-billing-admin" })}>
+                    <WalletCards className="mr-2 h-4 w-4" /> Dashboard thanh toán
                   </DropdownMenuItem>}
                 </>
               )}

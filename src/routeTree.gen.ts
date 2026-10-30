@@ -20,6 +20,7 @@ import { Route as AuthenticatedMonthlyCheckoutRouteImport } from './routes/_auth
 import { Route as AuthenticatedMyEventsRouteImport } from './routes/_authenticated/my-events'
 import { Route as AuthenticatedMyParticipationsRouteImport } from './routes/_authenticated/my-participations'
 import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/plans'
+import { Route as AuthenticatedPlatformBillingAdminRouteImport } from './routes/_authenticated/platform-billing-admin'
 import { Route as AuthenticatedPlatformReportBugRouteImport } from './routes/_authenticated/platform-report-bug'
 import { Route as AuthenticatedPlatformReviewRouteImport } from './routes/_authenticated/platform-review'
 import { Route as AuthenticatedPlatformSupportAdminRouteImport } from './routes/_authenticated/platform-support-admin'
@@ -102,6 +103,12 @@ const AuthenticatedPlansRoute = AuthenticatedPlansRouteImport.update({
   path: '/plans',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPlatformBillingAdminRoute =
+  AuthenticatedPlatformBillingAdminRouteImport.update({
+    id: '/platform-billing-admin',
+    path: '/platform-billing-admin',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPlatformReportBugRoute =
   AuthenticatedPlatformReportBugRouteImport.update({
     id: '/platform-report-bug',
@@ -247,6 +254,7 @@ export interface FileRoutesByFullPath {
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/my-participations': typeof AuthenticatedMyParticipationsRoute
   '/plans': typeof AuthenticatedPlansRoute
+  '/platform-billing-admin': typeof AuthenticatedPlatformBillingAdminRoute
   '/platform-report-bug': typeof AuthenticatedPlatformReportBugRoute
   '/platform-review': typeof AuthenticatedPlatformReviewRoute
   '/platform-support-admin': typeof AuthenticatedPlatformSupportAdminRoute
@@ -283,6 +291,7 @@ export interface FileRoutesByTo {
   '/my-events': typeof AuthenticatedMyEventsRoute
   '/my-participations': typeof AuthenticatedMyParticipationsRoute
   '/plans': typeof AuthenticatedPlansRoute
+  '/platform-billing-admin': typeof AuthenticatedPlatformBillingAdminRoute
   '/platform-report-bug': typeof AuthenticatedPlatformReportBugRoute
   '/platform-review': typeof AuthenticatedPlatformReviewRoute
   '/platform-support-admin': typeof AuthenticatedPlatformSupportAdminRoute
@@ -320,6 +329,7 @@ export interface FileRoutesById {
   '/_authenticated/my-events': typeof AuthenticatedMyEventsRoute
   '/_authenticated/my-participations': typeof AuthenticatedMyParticipationsRoute
   '/_authenticated/plans': typeof AuthenticatedPlansRoute
+  '/_authenticated/platform-billing-admin': typeof AuthenticatedPlatformBillingAdminRoute
   '/_authenticated/platform-report-bug': typeof AuthenticatedPlatformReportBugRoute
   '/_authenticated/platform-review': typeof AuthenticatedPlatformReviewRoute
   '/_authenticated/platform-support-admin': typeof AuthenticatedPlatformSupportAdminRoute
@@ -358,6 +368,7 @@ export interface FileRouteTypes {
     | '/my-events'
     | '/my-participations'
     | '/plans'
+    | '/platform-billing-admin'
     | '/platform-report-bug'
     | '/platform-review'
     | '/platform-support-admin'
@@ -394,6 +405,7 @@ export interface FileRouteTypes {
     | '/my-events'
     | '/my-participations'
     | '/plans'
+    | '/platform-billing-admin'
     | '/platform-report-bug'
     | '/platform-review'
     | '/platform-support-admin'
@@ -430,6 +442,7 @@ export interface FileRouteTypes {
     | '/_authenticated/my-events'
     | '/_authenticated/my-participations'
     | '/_authenticated/plans'
+    | '/_authenticated/platform-billing-admin'
     | '/_authenticated/platform-report-bug'
     | '/_authenticated/platform-review'
     | '/_authenticated/platform-support-admin'
@@ -546,6 +559,13 @@ declare module '@tanstack/react-router' {
       path: '/plans'
       fullPath: '/plans'
       preLoaderRoute: typeof AuthenticatedPlansRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/platform-billing-admin': {
+      id: '/_authenticated/platform-billing-admin'
+      path: '/platform-billing-admin'
+      fullPath: '/platform-billing-admin'
+      preLoaderRoute: typeof AuthenticatedPlatformBillingAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/platform-report-bug': {
@@ -726,6 +746,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedMyEventsRoute: typeof AuthenticatedMyEventsRoute
   AuthenticatedMyParticipationsRoute: typeof AuthenticatedMyParticipationsRoute
   AuthenticatedPlansRoute: typeof AuthenticatedPlansRoute
+  AuthenticatedPlatformBillingAdminRoute: typeof AuthenticatedPlatformBillingAdminRoute
   AuthenticatedPlatformReportBugRoute: typeof AuthenticatedPlatformReportBugRoute
   AuthenticatedPlatformReviewRoute: typeof AuthenticatedPlatformReviewRoute
   AuthenticatedPlatformSupportAdminRoute: typeof AuthenticatedPlatformSupportAdminRoute
@@ -751,6 +772,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedMyEventsRoute: AuthenticatedMyEventsRoute,
   AuthenticatedMyParticipationsRoute: AuthenticatedMyParticipationsRoute,
   AuthenticatedPlansRoute: AuthenticatedPlansRoute,
+  AuthenticatedPlatformBillingAdminRoute:
+    AuthenticatedPlatformBillingAdminRoute,
   AuthenticatedPlatformReportBugRoute: AuthenticatedPlatformReportBugRoute,
   AuthenticatedPlatformReviewRoute: AuthenticatedPlatformReviewRoute,
   AuthenticatedPlatformSupportAdminRoute:

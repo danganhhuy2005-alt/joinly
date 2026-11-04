@@ -1,3 +1,5 @@
+import { PaidFeatureOverlay } from "@/components/PaidFeatureOverlay";
+import { usePaidFeatureGate } from "@/lib/usePaidFeatureGate";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
@@ -124,6 +126,7 @@ function FeedbackManagePage() {
 
   const [busy, setBusy] = useState(false);
   const [role, setRole] = useState<EventRole>(null);
+  const { isFree, loaded: planLoaded } = usePaidFeatureGate(id);
   const [eventName, setEventName] = useState("");
 
   const [forms, setForms] = useState<FeedbackForm[]>([]);
@@ -741,6 +744,7 @@ function FeedbackManagePage() {
 
   return (
     <main className="min-h-screen bg-secondary/30 px-4 py-8">
+      {planLoaded && isFree && <PaidFeatureOverlay eventId={id} feature="Feedback" isOwner={role === "owner"} />}
       <div className="mx-auto max-w-6xl space-y-6">
         <Link
           to="/manage-event/$id"

@@ -1,3 +1,5 @@
+import { PaidFeatureOverlay } from "@/components/PaidFeatureOverlay";
+import { usePaidFeatureGate } from "@/lib/usePaidFeatureGate";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, BookOpenCheck, Gamepad2, Loader2, Plus, Search, Sparkles } from "lucide-react";
@@ -29,6 +31,7 @@ function QuizLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [role, setRole] = useState<EventRole>(null);
+  const { isFree, loaded: planLoaded } = usePaidFeatureGate(id);
   const [eventName, setEventName] = useState("Sự kiện");
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [search, setSearch] = useState("");
@@ -87,6 +90,7 @@ function QuizLibraryPage() {
 
   return (
     <main className="mx-auto max-w-[1500px] space-y-6 px-4 py-6 lg:px-8">
+      {planLoaded && isFree && <PaidFeatureOverlay eventId={id} feature="Quiz" isOwner={role === "owner"} />}
       <header className="relative overflow-hidden rounded-3xl border border-emerald-600/20 bg-[#08272b] p-6 text-white sm:p-8">
         <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-24 h-64 w-64 rounded-full border-[36px] border-white/10" />
         <Button variant="ghost" size="sm" asChild className="-ml-3 text-white/75 hover:bg-white/10 hover:text-white">

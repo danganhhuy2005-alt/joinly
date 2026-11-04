@@ -1,3 +1,5 @@
+import { PaidFeatureOverlay } from "@/components/PaidFeatureOverlay";
+import { usePaidFeatureGate } from "@/lib/usePaidFeatureGate";
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -44,6 +46,7 @@ const statusText: Record<QnaQuestion["status"], string> = {
 function QnaPage() {
   const { eventId } = useParams({ from: "/qna/$eventId" });
   const [role, setRole] = useState<EventRole>(null);
+  const { isFree, loaded: planLoaded } = usePaidFeatureGate(eventId);
   const [roleReady, setRoleReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<"participant" | "host">("participant");
@@ -145,6 +148,7 @@ function QnaPage() {
 
   return (
     <div className="min-h-screen bg-secondary/30 px-4 py-9 text-foreground">
+      {planLoaded && isFree && <PaidFeatureOverlay eventId={eventId} feature="Live Q&A" isOwner={role === "owner"} />}
       <main className="mx-auto max-w-5xl space-y-6">
         <a href={role ? `/manage-event/${eventId}` : `/join/${eventId}`}
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">

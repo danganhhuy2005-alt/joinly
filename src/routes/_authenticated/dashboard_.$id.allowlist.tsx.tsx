@@ -1,3 +1,5 @@
+import { PaidFeatureOverlay } from "@/components/PaidFeatureOverlay";
+import { usePaidFeatureGate } from "@/lib/usePaidFeatureGate";
 import {
   useCallback,
   useEffect,
@@ -209,6 +211,8 @@ function AllowlistPage() {
   const { id } = useParams({
     from: "/_authenticated/dashboard_/$id/allowlist/tsx",
   });
+
+  const { isFree, loaded: planLoaded } = usePaidFeatureGate(id);
 
   const [event, setEvent] =
     useState<EventRow | null>(
@@ -1427,6 +1431,7 @@ function AllowlistPage() {
 
   return (
     <div className="min-h-screen bg-secondary/30 px-4 py-10">
+      {planLoaded && isFree && <PaidFeatureOverlay eventId={id} feature="Allow-list" />}
       <div className="mx-auto max-w-6xl">
         <Link
           to="/manage-event/$id"

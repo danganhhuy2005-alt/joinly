@@ -22,6 +22,7 @@ import {
   Crown,
   Copy,
   MessageCircle,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -365,8 +366,26 @@ function ManageEvent() {
     setRestoredOldOrder(false);
   };
 
+  const showPaidFeatureNotice = () => {
+    toast.info("Tính năng này chỉ dành cho sự kiện sử dụng gói trả phí.", {
+      action: role === "owner" ? {
+        label: "Nâng cấp",
+        onClick: () => {
+          setPaymentResult(null);
+          setOldOrderError(null);
+          setCheckingOldOrder(true);
+          setBillingOpen(true);
+        },
+      } : undefined,
+    });
+  };
+
   const toggleAllowlist = async (enabled: boolean) => {
     if (!event) return;
+    if (event.plan_code === "free") {
+      showPaidFeatureNotice();
+      return;
+    }
 
     if (enabled && allowlist.length === 0) {
       toast.error("Hãy thêm người vào Allow-list trước khi bật.");
@@ -405,6 +424,10 @@ function ManageEvent() {
 
   const changeAllowlistScope = async (scope: "event" | "room") => {
     if (!event) return;
+    if (event.plan_code === "free") {
+      showPaidFeatureNotice();
+      return;
+    }
 
     if (scope === "room" && rooms.length === 0) {
       toast.error("Sự kiện chưa có phòng.");
@@ -917,7 +940,7 @@ function ManageEvent() {
 
                 <Switch
                   checked={event.allowlist_enabled}
-                  disabled={updatingAllowlist}
+                  disabled={updatingAllowlist || event.plan_code === "free"}
                   onCheckedChange={toggleAllowlist}
                 />
               </div>
@@ -933,6 +956,7 @@ function ManageEvent() {
                     type="button"
                     variant={event.allowlist_scope === "event" ? "default" : "outline"}
                     onClick={() => changeAllowlistScope("event")}
+                    disabled={event.plan_code === "free"}
                   >
                     Toàn sự kiện
                   </Button>
@@ -941,6 +965,7 @@ function ManageEvent() {
                     type="button"
                     variant={event.allowlist_scope === "room" ? "default" : "outline"}
                     onClick={() => changeAllowlistScope("room")}
+                    disabled={event.plan_code === "free"}
                   >
                     Theo từng phòng
                   </Button>
@@ -969,6 +994,7 @@ function ManageEvent() {
                 <Link to="/dashboard/$id/allowlist/tsx" params={{ id }}>
                   <Users className="h-4 w-4" />
                   Quản lý Allow-list
+                  {event.plan_code === "free" && <Lock className="h-3.5 w-3.5 opacity-60" />}
                 </Link>
               </Button>
             </div>

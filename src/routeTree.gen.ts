@@ -33,6 +33,7 @@ import { Route as AuthenticatedCheckInIdRouteImport } from './routes/_authentica
 import { Route as AuthenticatedDashboardIdRouteImport } from './routes/_authenticated/dashboard.$id'
 import { Route as AuthenticatedEditEventIdRouteImport } from './routes/_authenticated/edit-event.$id'
 import { Route as AuthenticatedEventIdRouteImport } from './routes/_authenticated/event.$id'
+import { Route as AuthenticatedManageEventIdRouteImport } from './routes/_authenticated/manage-event.$id'
 import { Route as AuthenticatedQuizHostSessionIdRouteImport } from './routes/_authenticated/quiz-host.$sessionId'
 import { Route as ApiSepayWebhookRouteImport } from './routes/api.sepay.webhook'
 import { Route as JoinIdIndexRouteImport } from './routes/join.$id.index'
@@ -173,6 +174,12 @@ const AuthenticatedEventIdRoute = AuthenticatedEventIdRouteImport.update({
   path: '/event/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedManageEventIdRoute =
+  AuthenticatedManageEventIdRouteImport.update({
+    id: '/manage-event/$id',
+    path: '/manage-event/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedQuizHostSessionIdRoute =
   AuthenticatedQuizHostSessionIdRouteImport.update({
     id: '/quiz-host/$sessionId',
@@ -260,6 +267,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
+  '/manage-event/$id': typeof AuthenticatedManageEventIdRoute
   '/quiz-host/$sessionId': typeof AuthenticatedQuizHostSessionIdRoute
   '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
@@ -295,6 +303,7 @@ export interface FileRoutesByTo {
   '/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/event/$id': typeof AuthenticatedEventIdRoute
+  '/manage-event/$id': typeof AuthenticatedManageEventIdRoute
   '/quiz-host/$sessionId': typeof AuthenticatedQuizHostSessionIdRoute
   '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
@@ -333,6 +342,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard/$id': typeof AuthenticatedDashboardIdRoute
   '/_authenticated/edit-event/$id': typeof AuthenticatedEditEventIdRoute
   '/_authenticated/event/$id': typeof AuthenticatedEventIdRoute
+  '/_authenticated/manage-event/$id': typeof AuthenticatedManageEventIdRoute
   '/_authenticated/quiz-host/$sessionId': typeof AuthenticatedQuizHostSessionIdRoute
   '/api/sepay/webhook': typeof ApiSepayWebhookRoute
   '/join/$id/$roomId': typeof JoinIdRoomIdRoute
@@ -371,6 +381,7 @@ export interface FileRouteTypes {
     | '/dashboard/$id'
     | '/edit-event/$id'
     | '/event/$id'
+    | '/manage-event/$id'
     | '/quiz-host/$sessionId'
     | '/api/sepay/webhook'
     | '/join/$id/$roomId'
@@ -406,6 +417,7 @@ export interface FileRouteTypes {
     | '/dashboard/$id'
     | '/edit-event/$id'
     | '/event/$id'
+    | '/manage-event/$id'
     | '/quiz-host/$sessionId'
     | '/api/sepay/webhook'
     | '/join/$id/$roomId'
@@ -443,6 +455,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard/$id'
     | '/_authenticated/edit-event/$id'
     | '/_authenticated/event/$id'
+    | '/_authenticated/manage-event/$id'
     | '/_authenticated/quiz-host/$sessionId'
     | '/api/sepay/webhook'
     | '/join/$id/$roomId'
@@ -639,6 +652,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEventIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/manage-event/$id': {
+      id: '/_authenticated/manage-event/$id'
+      path: '/manage-event/$id'
+      fullPath: '/manage-event/$id'
+      preLoaderRoute: typeof AuthenticatedManageEventIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/quiz-host/$sessionId': {
       id: '/_authenticated/quiz-host/$sessionId'
       path: '/quiz-host/$sessionId'
@@ -735,6 +755,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardIdRoute: typeof AuthenticatedDashboardIdRoute
   AuthenticatedEditEventIdRoute: typeof AuthenticatedEditEventIdRoute
   AuthenticatedEventIdRoute: typeof AuthenticatedEventIdRoute
+  AuthenticatedManageEventIdRoute: typeof AuthenticatedManageEventIdRoute
   AuthenticatedQuizHostSessionIdRoute: typeof AuthenticatedQuizHostSessionIdRoute
   AuthenticatedDashboardIdFeedbackRoute: typeof AuthenticatedDashboardIdFeedbackRoute
   AuthenticatedDashboardIdMembersRoute: typeof AuthenticatedDashboardIdMembersRoute
@@ -762,6 +783,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardIdRoute: AuthenticatedDashboardIdRoute,
   AuthenticatedEditEventIdRoute: AuthenticatedEditEventIdRoute,
   AuthenticatedEventIdRoute: AuthenticatedEventIdRoute,
+  AuthenticatedManageEventIdRoute: AuthenticatedManageEventIdRoute,
   AuthenticatedQuizHostSessionIdRoute: AuthenticatedQuizHostSessionIdRoute,
   AuthenticatedDashboardIdFeedbackRoute: AuthenticatedDashboardIdFeedbackRoute,
   AuthenticatedDashboardIdMembersRoute: AuthenticatedDashboardIdMembersRoute,

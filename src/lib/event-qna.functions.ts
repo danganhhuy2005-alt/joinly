@@ -6,7 +6,7 @@ import type { Database } from "@/integrations/supabase/types";
 
 const uuid = z.string().uuid();
 const eventInput = z.object({ eventId: uuid });
-const guestInput = eventInput.extend({ ticketToken: uuid });
+const guestInput = eventInput.extend({ ticketToken: uuid, accessToken: z.string().min(20) });
 
 export type QnaQuestion = {
   id: string;
@@ -62,13 +62,30 @@ async function requireActiveEvent(db: AdminClient, eventId: string) {
 }
 async function requireTicket(db: AdminClient, eventId: string, token: string) {
   const { data, error } = await db.from("participants")
-    .select("id, full_name")
+    .select("id, full_name, email")
     .eq("event_id", eventId)
     .eq("confirmation_token", token)
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("Vé tham gia không hợp lệ. Hãy mở Q&A từ vé Joinly của bạn.");
   return data;
+}
+// Do not trust possession of a ticket link alone for interactive Q&A.
+// Supabase validates the bearer token; the registered address is read from
+// the database, never accepted from the browser.
+async function requireQnaIdentity(db: AdminClient, eventId: string, ticketToken: string, accessToken: string) {
+  const { data: auth, error: authError } = await db.auth.getUser(accessToken);
+  const user = auth?.user;
+  if (authError || !user || !user.email || !user.email_confirmed_at) {
+    throw new Error("Vui lòng đăng nhập bằng tài khoản đã đăng ký tham gia sự kiện.");
+  }
+  const participant = await requireTicket(db, eventId, ticketToken);
+  const registered = String(participant.email ?? "").trim().toLowerCase();
+  const authenticated = user.email.trim().toLowerCase();
+  if (!registered || registered !== authenticated) {
+    throw new Error("Email tài khoản không trùng với email đã đăng ký sự kiện. Vui lòng đăng nhập đúng tài khoản.");
+  }
+  return participant;
 }
 async function getSettings(db: AdminClient, eventId: string) {
   const { data, error } = await db.from("event_qna_settings")
@@ -107,7 +124,7 @@ export const getEventQnaForParticipant = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const db = await admin();
     const ev = await requireActiveEvent(db, data.eventId);
-    const participant = await requireTicket(db, data.eventId, data.ticketToken);
+    const participant = await requireQnaIdentity(db, data.eventId, data.ticketToken, data.accessToken);
     const isOpen = await getSettings(db, data.eventId);
     const [
       { data: published, error: e1 },
@@ -154,7 +171,7 @@ export const submitEventQnaQuestion = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const db = await admin();
     await requireActiveEvent(db, data.eventId);
-    const p = await requireTicket(db, data.eventId, data.ticketToken);
+    const p = await requireQnaIdentity(db, data.eventId, data.ticketToken, data.accessToken);
     if (!(await getSettings(db, data.eventId))) throw new Error("BTC đang đóng nhận câu hỏi.");
 
     // At most 3 questions are pending for this ticket at a time.
@@ -190,7 +207,7 @@ export const setEventQnaHand = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const db = await admin();
     await requireActiveEvent(db, data.eventId);
-    const p = await requireTicket(db, data.eventId, data.ticketToken);
+    const p = await requireQnaIdentity(db, data.eventId, data.ticketToken, data.accessToken);
     if (!(await getSettings(db, data.eventId))) throw new Error("BTC đang đóng tương tác trực tiếp.");
     const { data: prev, error: readError } = await db.from("event_qna_hands")
       .select("status, updated_at").eq("event_id", data.eventId).eq("participant_id", p.id).maybeSingle();

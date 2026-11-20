@@ -1,14 +1,14 @@
-import { PaidFeatureOverlay } from "@/components/PaidFeatureOverlay";
-import { usePaidFeatureGate } from "@/lib/usePaidFeatureGate";
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  ArrowLeft, CheckCheck, Hand, Loader2, MessageCircle, Send,
+  ArrowLeft, CheckCheck, Hand, Loader2, MessageCircle, Send, LockKeyhole,
   ShieldCheck, EyeOff, Eye, RefreshCw, XCircle, MonitorPlay, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { getJoined } from "@/lib/joined-events";
 import { getEventRole, type EventRole } from "@/lib/event-role";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ const statusText: Record<QnaQuestion["status"], string> = {
 function QnaPage() {
   const { eventId } = useParams({ from: "/qna/$eventId" });
   const [role, setRole] = useState<EventRole>(null);
-  const { isFree, loaded: planLoaded } = usePaidFeatureGate(eventId);
+  const { user, session, loading: authLoading } = useAuth();
   const [roleReady, setRoleReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<"participant" | "host">("participant");
@@ -57,6 +57,7 @@ function QnaPage() {
   const [error, setError] = useState("");
   const [body, setBody] = useState("");
   const [anonymous, setAnonymous] = useState(true);
+  const [loginError, setLoginError] = useState("");
   const [projecting, setProjecting] = useState<QnaQuestion | null>(null);
 
   const loadGuest = useServerFn(getEventQnaForParticipant);
@@ -95,25 +96,36 @@ function QnaPage() {
   }, [eventId]);
 
   const hostMode = role !== null && tab === "host";
+  const accessToken = session?.access_token ?? null;
+  useEffect(() => {
+    setGuest(null);
+    setLoginError("");
+  }, [accessToken, eventId]);
   const refresh = useCallback(async () => {
     try {
       if (hostMode) {
         const data = await loadHost({ data: { eventId } });
         setHost(data);
-      } else if (token) {
-        const data = await loadGuest({ data: { eventId, ticketToken: token } });
+      } else if (token && accessToken) {
+        const data = await loadGuest({ data: { eventId, ticketToken: token, accessToken } });
         setGuest(data);
+        setLoginError("");
       }
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không thể tải Q&A. Kiểm tra cấu hình Supabase.");
+      const message = err instanceof Error ? err.message : "Không thể tải Q&A. Kiểm tra cấu hình Supabase.";
+      if (!hostMode && token) {
+        setGuest(null);
+        setLoginError(message);
+        setError("");
+      } else setError(message);
     } finally {
       setLoading(false);
     }
-  }, [eventId, hostMode, token, loadHost, loadGuest]);
+  }, [eventId, hostMode, token, accessToken, loadHost, loadGuest]);
 
   useEffect(() => {
-    if (!roleReady || (!hostMode && !token)) { setLoading(false); return; }
+    if (!roleReady || authLoading || (!hostMode && (!token || !accessToken))) { setLoading(false); return; }
     setLoading(true);
     void refresh();
     // Polling is a reliable fallback if Realtime publication or connection is unavailable.
@@ -130,7 +142,7 @@ function QnaPage() {
       }, () => { void refresh(); })
       .subscribe();
     return () => { window.clearInterval(timer); void supabase.removeChannel(channel); };
-  }, [roleReady, hostMode, token, eventId, refresh]);
+  }, [roleReady, authLoading, hostMode, token, accessToken, eventId, refresh]);
 
   const perform = async (fn: () => Promise<unknown>, success: string) => {
     if (busy) return;
@@ -148,7 +160,6 @@ function QnaPage() {
 
   return (
     <div className="min-h-screen bg-secondary/30 px-4 py-9 text-foreground">
-      {planLoaded && isFree && <PaidFeatureOverlay eventId={eventId} feature="Live Q&A" isOwner={role === "owner"} />}
       <main className="mx-auto max-w-5xl space-y-6">
         <a href={role ? `/manage-event/${eventId}` : `/join/${eventId}`}
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
@@ -189,10 +200,42 @@ function QnaPage() {
           <div className="rounded-2xl border bg-card p-7">
             <h2 className="font-semibold">Cần vé tham gia sự kiện</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Bạn không cần đăng nhập. Hãy đăng ký qua QR, sau đó mở Q&A từ trang vé xác nhận.
-              Nếu đã đăng ký bằng email Google, đăng nhập để đồng bộ vé của mình.
+              Hãy đăng ký qua QR và mở lại trang vé xác nhận. Để sử dụng Giơ tay / Hỏi BTC,
+              bạn cần đăng nhập bằng tài khoản có email trùng email đăng ký sự kiện.
             </p>
             <Button asChild className="mt-4"><a href={`/join/${eventId}`}>Đăng ký / Mở vé sự kiện</a></Button>
+          </div>
+        )}
+
+        {!hostMode && roleReady && !authLoading && token && !guest && !loading && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 px-4 py-6" role="presentation">
+            <section role="dialog" aria-modal="true" aria-label="Yêu cầu đăng nhập"
+              className="relative w-full max-w-md rounded-2xl border bg-card p-6 text-center shadow-2xl">
+              <a href={`/join/${eventId}/confirm/${token}`} aria-label="Đóng và quay về vé"
+                className="absolute right-4 top-4 rounded-md p-2 text-muted-foreground hover:bg-secondary">
+                <X className="h-5 w-5" />
+              </a>
+              <span className="mx-auto mt-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <LockKeyhole className="h-7 w-7" />
+              </span>
+              <h2 className="mt-4 text-xl font-bold">{user ? "Xác minh tài khoản tham gia" : "Yêu cầu đăng nhập"}</h2>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                Để giơ tay hoặc đặt câu hỏi cho BTC, vui lòng đăng nhập bằng tài khoản có email trùng với email đã đăng ký tham gia sự kiện.
+              </p>
+              {user && (
+                <p className="mt-4 rounded-lg bg-secondary px-4 py-3 text-sm">
+                  Tài khoản hiện tại: <strong className="break-all">{user.email}</strong>
+                </p>
+              )}
+              {loginError && <p className="mt-3 text-sm text-destructive">{loginError}</p>}
+              <div className="mt-5 rounded-xl border bg-background p-4">
+                <GoogleSignInButton onSuccess={() => setLoginError("")} />
+              </div>
+              <a href={`/join/${eventId}/confirm/${token}`}
+                className="mt-5 inline-block text-sm text-muted-foreground hover:underline">
+                Để sau — tiếp tục xem vé QR
+              </a>
+            </section>
           </div>
         )}
 
@@ -283,7 +326,7 @@ function QnaPage() {
                 <p className="mt-2 text-sm text-muted-foreground">BTC sẽ thấy tên trên vé của bạn trong hàng đợi giơ tay.</p>
                 <Button className="mt-4 w-full" variant={guest.handRaised ? "outline" : "default"}
                   disabled={!guest.isOpen || busy}
-                  onClick={() => void perform(() => raise({ data: { eventId, ticketToken: token!, raised: !guest.handRaised } }),
+                  onClick={() => void perform(() => raise({ data: { eventId, ticketToken: token!, accessToken: accessToken!, raised: !guest.handRaised } }),
                     guest.handRaised ? "Đã hạ tay" : "Đã gửi yêu cầu giơ tay") }>
                   <Hand className="h-4 w-4" /> {guest.handRaised ? "Hạ tay" : "Giơ tay"}
                 </Button>
@@ -311,7 +354,7 @@ function QnaPage() {
                 <Button className="mt-4 w-full"
                   disabled={!guest.isOpen || busy || reachedQuestionLimit || body.trim().length < 5}
                   onClick={() => void perform(async () => {
-                    await ask({ data: { eventId, ticketToken: token!, body: body.trim(), isAnonymous: anonymous } });
+                    await ask({ data: { eventId, ticketToken: token!, accessToken: accessToken!, body: body.trim(), isAnonymous: anonymous } });
                     setBody("");
                   }, "Đã gửi câu hỏi, đang chờ BTC duyệt") }>
                   <Send className="h-4 w-4" /> Gửi câu hỏi
